@@ -7,6 +7,7 @@
     <meta name="description" content="AI-powered gait analysis tool for runners and physical therapists. Analyze running form, detect biomechanical issues, and improve performance.">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
     <style>
         * {
             margin: 0;
@@ -48,6 +49,9 @@
             .main-content {
                 grid-template-columns: 1fr;
             }
+            h1 {
+                font-size: 1.8em;
+            }
         }
         .video-section {
             position: relative;
@@ -63,7 +67,6 @@
         #webcam {
             width: 100%;
             display: block;
-            transform: scaleX(-1);
         }
         #canvas {
             position: absolute;
@@ -71,7 +74,18 @@
             left: 0;
             width: 100%;
             height: 100%;
-            transform: scaleX(-1);
+        }
+        .fps-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #0f0;
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 10;
         }
         .controls {
             display: flex;
@@ -118,6 +132,13 @@
         #recordBtn.recording {
             background: #e74c3c;
             animation: pulse 1.5s infinite;
+        }
+        #exportBtn {
+            background: #3498db;
+            color: white;
+        }
+        #exportBtn:hover:not(:disabled) {
+            background: #2980b9;
         }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
@@ -244,6 +265,26 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        .charts-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+        .charts-section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .chart-container canvas {
+            max-height: 300px;
+        }
         .info-section {
             margin-top: 30px;
             padding: 20px;
@@ -287,6 +328,7 @@
         <div class="main-content">
             <div class="video-section">
                 <div id="videoContainer">
+                    <div class="fps-indicator" id="fpsDisplay">FPS: 0</div>
                     <video id="webcam" autoplay playsinline></video>
                     <canvas id="canvas"></canvas>
                 </div>
@@ -294,6 +336,7 @@
                     <button id="startBtn">Start Camera</button>
                     <button id="stopBtn" disabled>Stop Camera</button>
                     <button id="recordBtn" disabled>Start Recording</button>
+                    <button id="exportBtn" disabled>Export CSV</button>
                 </div>
             </div>
 
@@ -324,8 +367,12 @@
                         <div class="metric-value" id="strideLength">0<span class="metric-unit">cm</span></div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-label">Knee Flexion</div>
+                        <div class="metric-label">Knee Flexion (L)</div>
                         <div class="metric-value" id="kneeAngle">0<span class="metric-unit">°</span></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Knee Flexion (R)</div>
+                        <div class="metric-value" id="kneeAngleRight">0<span class="metric-unit">°</span></div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-label">Hip Drop</div>
@@ -348,36 +395,40 @@
             </div>
         </div>
 
+        <div class="charts-section" id="chartsSection">
+            <h3>📊 Gait Analysis Charts</h3>
+            <div class="chart-container">
+                <canvas id="kneeFlexionChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="cadenceChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="hipDropChart"></canvas>
+            </div>
+        </div>
+
         <div class="info-section">
             <h3>📋 How to Use</h3>
             <ul>
-                <li><strong>Click "Start Camera"</strong> and grant camera permissions</li>
+                <li><strong>Click "Start Camera"</strong> and grant camera permissions (uses back camera on mobile)</li>
                 <li>Position the runner on a treadmill with full body visible (side view recommended)</li>
                 <li>Maintain 6-10 feet distance from camera for optimal tracking</li>
-                <li>System automatically analyzes gait patterns and detects issues</li>
-                <li>Review real-time metrics and warnings in the analysis panel</li>
-                <li>Use "Start Recording" to mark analysis sessions (visual indicator)</li>
+                <li><strong>Click "Start Recording"</strong> to begin data collection</li>
+                <li>System automatically analyzes gait patterns at high FPS</li>
+                <li><strong>Click "Export CSV"</strong> to download analysis data with timestamps</li>
+                <li>Review real-time charts for visual interpretation of gait patterns</li>
             </ul>
         </div>
 
         <div class="info-section">
             <h3>🎯 Features</h3>
             <ul>
-                <li><strong>Real-Time Pose Detection:</strong> 17 body keypoints tracked using TensorFlow.js MoveNet</li>
-                <li><strong>Gait Phase Identification:</strong> Initial Contact, Mid Stance, Toe Off, Swing Phase</li>
-                <li><strong>Biomechanical Metrics:</strong> Cadence, knee flexion, hip drop, stride analysis</li>
-                <li><strong>Issue Detection:</strong> Overstride, low cadence, excessive hip drop, insufficient knee flexion</li>
-                <li><strong>Visual Feedback:</strong> Skeleton overlay with real-time joint tracking</li>
-            </ul>
-        </div>
-
-        <div class="info-section">
-            <h3>⚠️ Common Gait Issues Detected</h3>
-            <ul>
-                <li><strong>Overstriding:</strong> Landing with foot too far ahead of center of mass</li>
-                <li><strong>Low Cadence:</strong> Less than 160 steps/min increases impact forces</li>
-                <li><strong>Excessive Hip Drop:</strong> Pelvic instability (IT band syndrome risk)</li>
-                <li><strong>Insufficient Knee Flexion:</strong> Rigid landing increases injury risk</li>
+                <li><strong>High-Speed Tracking:</strong> Target 120 FPS for smooth motion capture</li>
+                <li><strong>Back Camera Support:</strong> Uses rear camera on mobile devices for better recording</li>
+                <li><strong>Real-Time Charts:</strong> Live visualization of knee flexion, cadence, and hip drop</li>
+                <li><strong>CSV Export:</strong> Complete data export with timestamps for external analysis</li>
+                <li><strong>Bilateral Analysis:</strong> Tracks both left and right leg metrics independently</li>
             </ul>
         </div>
 
@@ -400,17 +451,165 @@
         let isRecording = false;
         
         // Gait analysis variables
+        let recordedData = [];
         let stepHistory = [];
         let kneeAngles = [];
+        let kneeAnglesRight = [];
         let hipPositions = [];
         let detectedIssues = new Set();
         let lastStepTime = 0;
         let currentPhase = 'standing';
+        let sessionStartTime = 0;
+        
+        // FPS tracking
+        let lastFrameTime = 0;
+        let fps = 0;
+        let frameCount = 0;
+        let fpsUpdateTime = 0;
+
+        // Chart data
+        let chartData = {
+            timestamps: [],
+            kneeFlexionLeft: [],
+            kneeFlexionRight: [],
+            cadence: [],
+            hipDrop: []
+        };
 
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const recordBtn = document.getElementById('recordBtn');
+        const exportBtn = document.getElementById('exportBtn');
         const statusDiv = document.getElementById('status');
+
+        // Initialize charts
+        let kneeChart, cadenceChart, hipChart;
+
+        function initCharts() {
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: false,
+                scales: {
+                    x: {
+                        display: true,
+                        title: { display: true, text: 'Time (seconds)' }
+                    },
+                    y: {
+                        display: true,
+                        beginAtZero: false
+                    }
+                },
+                plugins: {
+                    legend: { display: true }
+                }
+            };
+
+            kneeChart = new Chart(document.getElementById('kneeFlexionChart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Left Knee Flexion (°)',
+                        data: [],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'Right Knee Flexion (°)',
+                        data: [],
+                        borderColor: '#764ba2',
+                        backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            title: { display: true, text: 'Angle (degrees)' },
+                            suggestedMin: 120,
+                            suggestedMax: 180
+                        }
+                    }
+                }
+            });
+
+            cadenceChart = new Chart(document.getElementById('cadenceChart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Cadence (steps/min)',
+                        data: [],
+                        borderColor: '#27ae60',
+                        backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            title: { display: true, text: 'Steps per Minute' },
+                            suggestedMin: 140,
+                            suggestedMax: 200
+                        }
+                    }
+                }
+            });
+
+            hipChart = new Chart(document.getElementById('hipDropChart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Hip Drop (°)',
+                        data: [],
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        ...commonOptions.scales,
+                        y: {
+                            ...commonOptions.scales.y,
+                            title: { display: true, text: 'Hip Drop Angle (degrees)' },
+                            suggestedMin: 0,
+                            suggestedMax: 15
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            if (!isRecording || chartData.timestamps.length === 0) return;
+
+            const maxPoints = 100;
+            const dataSlice = chartData.timestamps.length > maxPoints ? 
+                chartData.timestamps.length - maxPoints : 0;
+
+            kneeChart.data.labels = chartData.timestamps.slice(dataSlice);
+            kneeChart.data.datasets[0].data = chartData.kneeFlexionLeft.slice(dataSlice);
+            kneeChart.data.datasets[1].data = chartData.kneeFlexionRight.slice(dataSlice);
+            kneeChart.update('none');
+
+            cadenceChart.data.labels = chartData.timestamps.slice(dataSlice);
+            cadenceChart.data.datasets[0].data = chartData.cadence.slice(dataSlice);
+            cadenceChart.update('none');
+
+            hipChart.data.labels = chartData.timestamps.slice(dataSlice);
+            hipChart.data.datasets[0].data = chartData.hipDrop.slice(dataSlice);
+            hipChart.update('none');
+        }
 
         async function init() {
             try {
@@ -425,6 +624,8 @@
                         trackerType: poseDetection.TrackerType.BoundingBox
                     }
                 );
+                
+                initCharts();
                 
                 statusDiv.className = 'status ready';
                 statusDiv.innerHTML = '✓ AI Model Ready - Click "Start Camera" to begin';
@@ -442,13 +643,17 @@
                 canvas = document.getElementById('canvas');
                 ctx = canvas.getContext('2d');
 
-                const stream = await navigator.mediaDevices.getUserMedia({
+                // Request back camera with high frame rate
+                const constraints = {
                     video: { 
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        facingMode: 'user'
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        frameRate: { ideal: 120, min: 60 },
+                        facingMode: { ideal: 'environment' } // Back camera
                     }
-                });
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 
                 webcam.srcObject = stream;
                 
@@ -463,8 +668,10 @@
                     recordBtn.disabled = false;
 
                     statusDiv.className = 'status ready';
-                    statusDiv.innerHTML = '🎥 Camera Active - Analyzing Gait...';
+                    statusDiv.innerHTML = '🎥 Camera Active (Back Camera) - Ready to Analyze';
 
+                    lastFrameTime = performance.now();
+                    fpsUpdateTime = performance.now();
                     detectPose();
                 };
             } catch (error) {
@@ -483,13 +690,14 @@
                 cancelAnimationFrame(animationId);
             }
             isRunning = false;
-            isRecording = false;
+            
+            if (isRecording) {
+                toggleRecording();
+            }
             
             startBtn.disabled = false;
             stopBtn.disabled = true;
             recordBtn.disabled = true;
-            recordBtn.classList.remove('recording');
-            recordBtn.textContent = 'Start Recording';
             
             if (ctx) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -498,16 +706,24 @@
             statusDiv.className = 'status';
             statusDiv.innerHTML = 'Camera Stopped - Click "Start Camera" to resume';
             
-            // Reset metrics
-            document.getElementById('gaitPhase').textContent = 'Standing';
-            document.getElementById('cadence').innerHTML = '0<span class="metric-unit">steps/min</span>';
-            document.getElementById('kneeAngle').innerHTML = '0<span class="metric-unit">°</span>';
-            document.getElementById('hipDrop').innerHTML = '0<span class="metric-unit">°</span>';
-            document.getElementById('overstride').textContent = 'Low';
+            document.getElementById('fpsDisplay').textContent = 'FPS: 0';
         }
 
         async function detectPose() {
             if (!isRunning) return;
+
+            const currentTime = performance.now();
+            const deltaTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+
+            // Calculate FPS
+            frameCount++;
+            if (currentTime - fpsUpdateTime >= 1000) {
+                fps = Math.round(frameCount * 1000 / (currentTime - fpsUpdateTime));
+                document.getElementById('fpsDisplay').textContent = `FPS: ${fps}`;
+                frameCount = 0;
+                fpsUpdateTime = currentTime;
+            }
 
             try {
                 const poses = await detector.estimatePoses(webcam);
@@ -517,7 +733,7 @@
                 if (poses.length > 0) {
                     const pose = poses[0];
                     drawSkeleton(pose.keypoints);
-                    analyzeGait(pose.keypoints);
+                    analyzeGait(pose.keypoints, currentTime);
                 }
             } catch (error) {
                 console.error('Pose detection error:', error);
@@ -527,17 +743,15 @@
         }
 
         function drawSkeleton(keypoints) {
-            // Connection pairs for drawing skeleton
             const connections = [
-                [5, 6], [5, 7], [7, 9], [6, 8], [8, 10], // Arms
-                [5, 11], [6, 12], [11, 12], // Torso
-                [11, 13], [13, 15], [12, 14], [14, 16] // Legs
+                [5, 6], [5, 7], [7, 9], [6, 8], [8, 10],
+                [5, 11], [6, 12], [11, 12],
+                [11, 13], [13, 15], [12, 14], [14, 16]
             ];
 
             ctx.strokeStyle = '#667eea';
             ctx.lineWidth = 4;
 
-            // Draw connections
             connections.forEach(([i, j]) => {
                 const kp1 = keypoints[i];
                 const kp2 = keypoints[j];
@@ -549,7 +763,6 @@
                 }
             });
 
-            // Draw keypoints
             keypoints.forEach(kp => {
                 if (kp.score > 0.3) {
                     ctx.beginPath();
@@ -563,35 +776,67 @@
             });
         }
 
-        function analyzeGait(keypoints) {
+        function analyzeGait(keypoints, timestamp) {
             const kpMap = {};
             keypoints.forEach((kp, i) => {
                 kpMap[i] = kp;
             });
 
-            // Calculate knee angle (left leg)
+            let currentData = {
+                timestamp: isRecording ? ((timestamp - sessionStartTime) / 1000).toFixed(2) : 0,
+                kneeFlexionLeft: 0,
+                kneeFlexionRight: 0,
+                hipDrop: 0,
+                cadence: 0,
+                overstride: 'Low',
+                gaitPhase: currentPhase,
+                issues: []
+            };
+
+            // Left knee angle
             if (kpMap[11] && kpMap[13] && kpMap[15]) {
                 const angle = calculateAngle(kpMap[11], kpMap[13], kpMap[15]);
                 kneeAngles.push(angle);
                 if (kneeAngles.length > 30) kneeAngles.shift();
                 document.getElementById('kneeAngle').innerHTML = 
                     Math.round(angle) + '<span class="metric-unit">°</span>';
+                currentData.kneeFlexionLeft = Math.round(angle);
                 
-                // Check for insufficient knee flexion
                 if (angle > 165) {
-                    addIssue('warning', 'Insufficient knee flexion - may increase impact stress');
+                    const issue = 'Insufficient left knee flexion';
+                    addIssue('warning', issue);
+                    currentData.issues.push(issue);
                 }
             }
 
-            // Calculate hip drop
+            // Right knee angle
+            if (kpMap[12] && kpMap[14] && kpMap[16]) {
+                const angle = calculateAngle(kpMap[12], kpMap[14], kpMap[16]);
+                kneeAnglesRight.push(angle);
+                if (kneeAnglesRight.length > 30) kneeAnglesRight.shift();
+                document.getElementById('kneeAngleRight').innerHTML = 
+                    Math.round(angle) + '<span class="metric-unit">°</span>';
+                currentData.kneeFlexionRight = Math.round(angle);
+                
+                if (angle > 165) {
+                    const issue = 'Insufficient right knee flexion';
+                    addIssue('warning', issue);
+                    currentData.issues.push(issue);
+                }
+            }
+
+            // Hip drop
             if (kpMap[11] && kpMap[12]) {
                 const hipDrop = Math.abs(kpMap[11].y - kpMap[12].y);
                 const hipDropAngle = Math.atan2(hipDrop, Math.abs(kpMap[11].x - kpMap[12].x)) * 180 / Math.PI;
                 document.getElementById('hipDrop').innerHTML = 
                     hipDropAngle.toFixed(1) + '<span class="metric-unit">°</span>';
+                currentData.hipDrop = parseFloat(hipDropAngle.toFixed(1));
                 
                 if (hipDropAngle > 8) {
-                    addIssue('critical', 'Excessive hip drop detected - risk of IT band syndrome');
+                    const issue = 'Excessive hip drop - IT band risk';
+                    addIssue('critical', issue);
+                    currentData.issues.push(issue);
                 }
             }
 
@@ -599,22 +844,45 @@
             if (kpMap[15] && kpMap[16]) {
                 const leftAnkleY = kpMap[15].y;
                 const rightAnkleY = kpMap[16].y;
-                detectGaitPhase(leftAnkleY, rightAnkleY, kpMap);
+                const cadenceVal = detectGaitPhase(leftAnkleY, rightAnkleY, kpMap);
+                currentData.cadence = cadenceVal;
             }
 
-            // Check for overstride
+            // Overstride check
             if (kpMap[11] && kpMap[15] && kpMap[0]) {
                 const hipAnkleDistance = Math.abs(kpMap[15].x - kpMap[11].x);
                 const bodyHeight = Math.abs(kpMap[0].y - kpMap[15].y);
                 const overstrideRatio = hipAnkleDistance / bodyHeight;
                 
                 if (overstrideRatio > 0.3) {
+                    currentData.overstride = 'High';
                     document.getElementById('overstride').textContent = 'High';
-                    addIssue('critical', 'Overstriding detected - land with foot closer to center of mass');
+                    const issue = 'Overstriding detected';
+                    addIssue('critical', issue);
+                    currentData.issues.push(issue);
                 } else if (overstrideRatio > 0.2) {
+                    currentData.overstride = 'Moderate';
                     document.getElementById('overstride').textContent = 'Moderate';
                 } else {
+                    currentData.overstride = 'Low';
                     document.getElementById('overstride').textContent = 'Low';
+                }
+            }
+
+            // Record data if recording
+            if (isRecording) {
+                recordedData.push(currentData);
+                
+                // Update chart data
+                chartData.timestamps.push(parseFloat(currentData.timestamp));
+                chartData.kneeFlexionLeft.push(currentData.kneeFlexionLeft);
+                chartData.kneeFlexionRight.push(currentData.kneeFlexionRight);
+                chartData.cadence.push(currentData.cadence);
+                chartData.hipDrop.push(currentData.hipDrop);
+                
+                // Update charts every 10 frames
+                if (recordedData.length % 10 === 0) {
+                    updateCharts();
                 }
             }
         }
@@ -622,6 +890,7 @@
         function detectGaitPhase(leftY, rightY, kpMap) {
             const diff = Math.abs(leftY - rightY);
             const now = Date.now();
+            let currentCadence = 0;
             
             if (diff > 30) {
                 if (leftY < rightY) {
@@ -634,19 +903,18 @@
                     updatePhaseIndicator(4);
                 }
                 
-                // Calculate cadence from step timing
                 if (now - lastStepTime > 300 && now - lastStepTime < 2000) {
                     stepHistory.push(now);
                     if (stepHistory.length > 10) stepHistory.shift();
                     
                     if (stepHistory.length >= 2) {
                         const avgStepTime = (stepHistory[stepHistory.length - 1] - stepHistory[0]) / (stepHistory.length - 1);
-                        const cadence = Math.round(60000 / avgStepTime);
+                        currentCadence = Math.round(60000 / avgStepTime);
                         document.getElementById('cadence').innerHTML = 
-                            cadence + '<span class="metric-unit">steps/min</span>';
+                            currentCadence + '<span class="metric-unit">steps/min</span>';
                         
-                        if (cadence < 160) {
-                            addIssue('warning', 'Low cadence - consider increasing step rate to reduce impact');
+                        if (currentCadence < 160) {
+                            addIssue('warning', 'Low cadence - increase step rate');
                         }
                     }
                 }
@@ -656,6 +924,8 @@
                 document.getElementById('gaitPhase').textContent = 'Double Support';
                 updatePhaseIndicator(1);
             }
+            
+            return currentCadence;
         }
 
         function updatePhaseIndicator(phase) {
@@ -691,29 +961,97 @@
             issueDiv.textContent = message;
             issuesList.insertBefore(issueDiv, issuesList.firstChild);
             
-            // Keep only last 5 issues
             while (issuesList.children.length > 5) {
                 issuesList.removeChild(issuesList.lastChild);
             }
             
-            // Remove issue from set after 5 seconds
             setTimeout(() => detectedIssues.delete(key), 5000);
+        }
+
+        function toggleRecording() {
+            isRecording = !isRecording;
+            recordBtn.classList.toggle('recording');
+            
+            if (isRecording) {
+                sessionStartTime = performance.now();
+                recordedData = [];
+                chartData = {
+                    timestamps: [],
+                    kneeFlexionLeft: [],
+                    kneeFlexionRight: [],
+                    cadence: [],
+                    hipDrop: []
+                };
+                recordBtn.textContent = 'Stop Recording';
+                exportBtn.disabled = true;
+                statusDiv.className = 'status ready';
+                statusDiv.innerHTML = '🔴 Recording in Progress...';
+            } else {
+                recordBtn.textContent = 'Start Recording';
+                exportBtn.disabled = recordedData.length === 0;
+                statusDiv.className = 'status ready';
+                statusDiv.innerHTML = '✓ Recording Stopped - ' + recordedData.length + ' data points captured';
+            }
+        }
+
+        function exportToCSV() {
+            if (recordedData.length === 0) {
+                alert('No data to export. Please record a session first.');
+                return;
+            }
+
+            let csv = 'Timestamp (s),Knee Flexion Left (°),Knee Flexion Right (°),Hip Drop (°),Cadence (steps/min),Overstride Risk,Gait Phase,Issues\n';
+            
+            recordedData.forEach(row => {
+                csv += `${row.timestamp},${row.kneeFlexionLeft},${row.kneeFlexionRight},${row.hipDrop},${row.cadence},"${row.overstride}","${row.gaitPhase}","${row.issues.join('; ')}"\n`;
+            });
+
+            // Add summary statistics
+            csv += '\n\nSummary Statistics\n';
+            csv += 'Metric,Average,Min,Max\n';
+            
+            const avgKneeLeft = (recordedData.reduce((sum, d) => sum + d.kneeFlexionLeft, 0) / recordedData.length).toFixed(1);
+            const minKneeLeft = Math.min(...recordedData.map(d => d.kneeFlexionLeft));
+            const maxKneeLeft = Math.max(...recordedData.map(d => d.kneeFlexionLeft));
+            csv += `Knee Flexion Left (°),${avgKneeLeft},${minKneeLeft},${maxKneeLeft}\n`;
+            
+            const avgKneeRight = (recordedData.reduce((sum, d) => sum + d.kneeFlexionRight, 0) / recordedData.length).toFixed(1);
+            const minKneeRight = Math.min(...recordedData.map(d => d.kneeFlexionRight));
+            const maxKneeRight = Math.max(...recordedData.map(d => d.kneeFlexionRight));
+            csv += `Knee Flexion Right (°),${avgKneeRight},${minKneeRight},${maxKneeRight}\n`;
+            
+            const avgHipDrop = (recordedData.reduce((sum, d) => sum + d.hipDrop, 0) / recordedData.length).toFixed(1);
+            const minHipDrop = Math.min(...recordedData.map(d => d.hipDrop));
+            const maxHipDrop = Math.max(...recordedData.map(d => d.hipDrop));
+            csv += `Hip Drop (°),${avgHipDrop},${minHipDrop},${maxHipDrop}\n`;
+            
+            const cadences = recordedData.filter(d => d.cadence > 0).map(d => d.cadence);
+            if (cadences.length > 0) {
+                const avgCadence = (cadences.reduce((sum, c) => sum + c, 0) / cadences.length).toFixed(0);
+                const minCadence = Math.min(...cadences);
+                const maxCadence = Math.max(...cadences);
+                csv += `Cadence (steps/min),${avgCadence},${minCadence},${maxCadence}\n`;
+            }
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gait_analysis_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            statusDiv.className = 'status ready';
+            statusDiv.innerHTML = '✓ CSV file exported successfully!';
         }
 
         // Event listeners
         startBtn.addEventListener('click', startCamera);
         stopBtn.addEventListener('click', stopCamera);
-        recordBtn.addEventListener('click', function() {
-            isRecording = !isRecording;
-            this.classList.toggle('recording');
-            this.textContent = isRecording ? 'Stop Recording' : 'Start Recording';
-            
-            if (isRecording) {
-                console.log('Recording started at:', new Date().toLocaleTimeString());
-            } else {
-                console.log('Recording stopped at:', new Date().toLocaleTimeString());
-            }
-        });
+        recordBtn.addEventListener('click', toggleRecording);
+        exportBtn.addEventListener('click', exportToCSV);
 
         // Initialize on page load
         window.addEventListener('load', init);
