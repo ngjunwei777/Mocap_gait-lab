@@ -3,13 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gait Biodynamics Lab - Treadmill Running Analysis</title>
-  <meta name="description" content="AI-powered treadmill running gait analysis by Ng Jun Wei. Real-time pose estimation, running gait metrics, and CSV export for biomechanics research.">
+  <title>Gait Biodynamics Lab - Pose Estimation for Running Biomechanics</title>
+  <meta name="description" content="AI-powered gait analysis tool for runners and physical therapists. Step-based running gait metrics using pose estimation.">
 
-  <!-- Libraries -->
+  <!-- TFJS + Pose Detection -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0"></script>
+
+  <!-- Charts -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+
+  <!-- XLSX export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -29,16 +34,13 @@
     }
     h1 { text-align: center; color: #667eea; margin-bottom: 10px; font-size: 2.5em; }
     .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
-    .main-content {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 30px;
-      margin-bottom: 20px;
-    }
+
+    .main-content { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; margin-bottom: 20px; }
     @media (max-width: 968px) {
       .main-content { grid-template-columns: 1fr; }
       h1 { font-size: 1.8em; }
     }
+
     .video-section { position: relative; }
     #videoContainer {
       position: relative;
@@ -50,8 +52,7 @@
     }
     #webcam { width: 100%; display: block; }
     #canvas {
-      position: absolute;
-      top: 0; left: 0;
+      position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
     }
     .fps-indicator {
@@ -65,26 +66,10 @@
       font-size: 14px;
       z-index: 10;
     }
-    .confidence-indicator {
-      position: absolute;
-      top: 10px; left: 10px;
-      background: rgba(0,0,0,0.7);
-      color: #fff;
-      padding: 8px 15px;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 14px;
-      z-index: 10;
-    }
-    .controls {
-      display: flex;
-      gap: 15px;
-      margin-top: 20px;
-      flex-wrap: wrap;
-    }
+    .controls { display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
     button {
       flex: 1;
-      min-width: 150px;
+      min-width: 160px;
       padding: 15px 25px;
       font-size: 16px;
       font-weight: 600;
@@ -95,29 +80,17 @@
       text-transform: uppercase;
       letter-spacing: 1px;
     }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     #startBtn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-    #startBtn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); }
     #stopBtn { background: #e74c3c; color: white; }
-    #stopBtn:hover:not(:disabled) { background: #c0392b; transform: translateY(-2px); }
     #recordBtn { background: #27ae60; color: white; }
-    #recordBtn:hover:not(:disabled) { background: #229954; }
     #recordBtn.recording { background: #e74c3c; animation: pulse 1.5s infinite; }
     #exportBtn { background: #3498db; color: white; }
-    #exportBtn:hover:not(:disabled) { background: #2980b9; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #snapshotBtn { background: #8e44ad; color: white; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
-    .analysis-panel {
-      background: #f8f9fa;
-      border-radius: 15px;
-      padding: 20px;
-      height: fit-content;
-    }
-    .metrics {
-      display: grid;
-      gap: 15px;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    }
+    .analysis-panel { background: #f8f9fa; border-radius: 15px; padding: 20px; height: fit-content; }
+    .metrics { display: grid; gap: 15px; }
     .metric-card {
       background: white;
       padding: 15px;
@@ -125,14 +98,8 @@
       border-left: 4px solid #667eea;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-    .metric-label {
-      font-size: 12px;
-      color: #666;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 5px;
-    }
-    .metric-value { font-size: 20px; font-weight: bold; color: #333; }
+    .metric-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+    .metric-value { font-size: 22px; font-weight: bold; color: #333; }
     .metric-unit { font-size: 14px; color: #999; margin-left: 5px; }
 
     .status { padding: 10px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-weight: 600; }
@@ -159,13 +126,7 @@
     }
     .phase-dot.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; transform: scale(1.2); }
 
-    .issues-list {
-      background: white;
-      padding: 15px;
-      border-radius: 10px;
-      max-height: 200px;
-      overflow-y: auto;
-    }
+    .issues-list { background: white; padding: 15px; border-radius: 10px; max-height: 200px; overflow-y: auto; }
     .issue-item { padding: 10px; margin-bottom: 8px; border-radius: 5px; font-size: 14px; }
     .issue-item.warning { background: #fff3cd; border-left: 3px solid #ffc107; }
     .issue-item.critical { background: #f8d7da; border-left: 3px solid #dc3545; }
@@ -180,12 +141,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .charts-section {
-      margin-top: 30px;
-      padding: 20px;
-      background: #f8f9fa;
-      border-radius: 15px;
-    }
+    .charts-section { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 15px; }
     .charts-section h3 { color: #667eea; margin-bottom: 15px; }
     .chart-container {
       background: white;
@@ -194,42 +150,47 @@
       margin-bottom: 20px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-    .chart-container canvas { max-height: 280px; }
+    .chart-container canvas { max-height: 300px; }
 
-    .info-section {
-      margin-top: 30px;
-      padding: 20px;
-      background: #f8f9fa;
-      border-radius: 15px;
-    }
+    .info-section { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 15px; }
     .info-section h3 { color: #667eea; margin-bottom: 15px; }
     .info-section ul { margin-left: 20px; line-height: 1.8; }
 
-    .github-footer {
-      text-align: center;
-      margin-top: 30px;
-      padding: 20px;
-      background: #f8f9fa;
-      border-radius: 15px;
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: white;
+      background: #667eea;
     }
-    .github-footer a { color: #667eea; text-decoration: none; font-weight: 600; }
-    .github-footer a:hover { text-decoration: underline; }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <h1>Jun Wei's Gait Lab</h1>
-    <p class="subtitle">Treadmill Running Gait Analysis (Sagittal + Frontal)</p>
+    <h1>🏃 Gait Biodynamics Lab</h1>
+    <p class="subtitle">Concurrent Left/Right Step Tracking • Sagittal & Frontal Modes • XLSX + PNG Export</p>
 
     <div id="status" class="status loading">
       <span class="loading-spinner"></span> Initializing AI Model...
     </div>
 
-    <!-- Subject info -->
     <div class="info-section">
-      <h3>👤 Subject Information</h3>
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+      <h3>👤 Subject & Camera Setup</h3>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 15px; margin-top: 15px;">
+        <div>
+          <label style="display:block; margin-bottom:5px; font-weight:600; color:#666;">View Mode:</label>
+          <select id="viewMode" style="width:100%; padding:10px; border:2px solid #667eea; border-radius:8px; font-size:14px;">
+            <option value="sagittal" selected>Sagittal (Side View)</option>
+            <option value="frontal">Frontal (Front/Back View)</option>
+          </select>
+          <div style="margin-top:6px; font-size:12px; color:#666;">
+            Sagittal: overstride meaningful. Frontal: valgus/step width meaningful.
+          </div>
+        </div>
+
         <div>
           <label style="display:block; margin-bottom:5px; font-weight:600; color:#666;">Sex:</label>
           <select id="subjectSex" style="width:100%; padding:10px; border:2px solid #667eea; border-radius:8px; font-size:14px;">
@@ -250,13 +211,16 @@
           <input type="number" id="subjectHeight" min="100" max="250" value="170" step="0.1" style="width:100%; padding:10px; border:2px solid #667eea; border-radius:8px; font-size:14px;">
         </div>
       </div>
+
+      <div style="margin-top: 12px; font-size: 12px; color:#666;">
+        Scaling: cm/pixel uses (nose → lowest ankle) vs your entered height. Keep full body visible for best stride/width estimates.
+      </div>
     </div>
 
     <div class="main-content">
       <div class="video-section">
         <div id="videoContainer">
           <div class="fps-indicator" id="fpsDisplay">FPS: 0</div>
-          <div class="confidence-indicator" id="confDisplay">Conf: 0%</div>
           <video id="webcam" autoplay playsinline muted></video>
           <canvas id="canvas"></canvas>
         </div>
@@ -264,97 +228,81 @@
           <button id="startBtn" disabled>Start Camera</button>
           <button id="stopBtn" disabled>Stop Camera</button>
           <button id="recordBtn" disabled>Start Recording</button>
-          <button id="exportBtn" disabled>Export CSV</button>
+          <button id="exportBtn" disabled>Export XLSX</button>
+          <button id="snapshotBtn" disabled>Snapshot PNG</button>
         </div>
       </div>
 
       <div class="analysis-panel">
-        <h3 style="margin-bottom: 15px; color: #667eea;">Real-Time Analysis</h3>
+        <h3 style="margin-bottom: 10px; color: #667eea;">
+          Real-Time (Per-Step)
+          <span class="pill" id="modePill">SAGITTAL</span>
+        </h3>
 
         <div class="gait-phase">
-          <div class="metric-label">Current Gait Phase (Running)</div>
+          <div class="metric-label">Current Phase</div>
           <div class="metric-value" id="gaitPhase">Standing</div>
           <div class="phase-indicator">
-            <div class="phase-dot" id="phase1">LC</div>
-            <div class="phase-dot" id="phase2">DC</div>
-            <div class="phase-dot" id="phase3">RC</div>
-            <div class="phase-dot" id="phase4">FL</div>
+            <div class="phase-dot" id="phase1">IC</div>
+            <div class="phase-dot" id="phase2">MS</div>
+            <div class="phase-dot" id="phase3">TO</div>
+            <div class="phase-dot" id="phase4">SW</div>
           </div>
           <div style="font-size: 10px; color: #999; margin-top: 10px; text-align: center;">
-            LC: Left Contact | DC: Double Contact | RC: Right Contact | FL: Flight
+            IC: Initial Contact | MS: Mid Stance | TO: Toe Off | SW: Swing
           </div>
         </div>
 
         <div class="metrics">
           <div class="metric-card">
-            <div class="metric-label">Cadence</div>
+            <div class="metric-label">Cadence (last ~8 IC)</div>
             <div class="metric-value" id="cadence">0<span class="metric-unit">steps/min</span></div>
           </div>
+
           <div class="metric-card">
-            <div class="metric-label">Stride Length</div>
+            <div class="metric-label">Stance Time Avg (last ~6 steps)</div>
+            <div class="metric-value" id="stanceTime">0<span class="metric-unit">s</span></div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-label">Swing Time Avg (last ~6 steps)</div>
+            <div class="metric-value" id="swingTime">0<span class="metric-unit">s</span></div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-label">Stride Length Avg (last ~6)</div>
             <div class="metric-value" id="strideLength">0<span class="metric-unit">cm</span></div>
           </div>
+
           <div class="metric-card">
-            <div class="metric-label">GRF (Left)</div>
-            <div class="metric-value" id="grfLeft">0<span class="metric-unit">N</span></div>
+            <div class="metric-label">Knee Min in Stance (L) - last</div>
+            <div class="metric-value" id="kneeMinL">0<span class="metric-unit">°</span></div>
           </div>
+
           <div class="metric-card">
-            <div class="metric-label">GRF (Right)</div>
-            <div class="metric-value" id="grfRight">0<span class="metric-unit">N</span></div>
+            <div class="metric-label">Knee Min in Stance (R) - last</div>
+            <div class="metric-value" id="kneeMinR">0<span class="metric-unit">°</span></div>
           </div>
+
           <div class="metric-card">
-            <div class="metric-label">Knee Flexion (L)</div>
-            <div class="metric-value" id="kneeAngle">0<span class="metric-unit">°</span></div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Knee Flexion (R)</div>
-            <div class="metric-value" id="kneeAngleRight">0<span class="metric-unit">°</span></div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Hip Drop (Sagittal)</div>
+            <div class="metric-label">Hip Drop Max (last step)</div>
             <div class="metric-value" id="hipDrop">0<span class="metric-unit">°</span></div>
           </div>
+
+          <!-- Mode-dependent metric -->
           <div class="metric-card">
-            <div class="metric-label">Overstride Risk</div>
-            <div class="metric-value" id="overstride">Low</div>
+            <div class="metric-label" id="modeMetricLabel">Overstride Risk (last IC)</div>
+            <div class="metric-value" id="modeMetricValue">Low</div>
           </div>
+
           <div class="metric-card">
-            <div class="metric-label">Vertical Oscillation</div>
-            <div class="metric-value" id="verticalOscillation">0<span class="metric-unit">cm</span></div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Foot Strike Pattern</div>
-            <div class="metric-value" id="footStrike">Unknown</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Stance/Flight Ratio</div>
-            <div class="metric-value" id="stanceFlightRatio">0</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Ground Contact Time</div>
-            <div class="metric-value" id="contactTime">0<span class="metric-unit">ms</span></div>
-          </div>
-          <!-- New frontal-plane metrics -->
-          <div class="metric-card">
-            <div class="metric-label">Pelvic Drop (Frontal)</div>
-            <div class="metric-value" id="pelvicDropFrontal">0<span class="metric-unit">°</span></div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Knee FPPA (L)</div>
-            <div class="metric-value" id="kneeFpaaLeft">0<span class="metric-unit">°</span></div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Knee FPPA (R)</div>
-            <div class="metric-value" id="kneeFpaaRight">0<span class="metric-unit">°</span></div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Step Width</div>
+            <div class="metric-label">Step Width (frontal)</div>
             <div class="metric-value" id="stepWidth">0<span class="metric-unit">cm</span></div>
           </div>
         </div>
 
         <div style="margin-top: 20px;">
-          <div class="metric-label">Detected Issues</div>
+          <div class="metric-label">Detected Issues (per-step)</div>
           <div class="issues-list" id="issuesList">
             <div style="text-align: center; color: #999; padding: 20px;">No issues detected yet</div>
           </div>
@@ -362,314 +310,230 @@
       </div>
     </div>
 
-    <!-- Charts -->
-    <div class="charts-section" id="chartsSection">
-      <h3>📊 Gait Analysis Charts</h3>
-      <div class="chart-container"><canvas id="kneeFlexionChart"></canvas></div>
-      <div class="chart-container"><canvas id="cadenceChart"></canvas></div>
-      <div class="chart-container"><canvas id="hipDropChart"></canvas></div>
-      <div class="chart-container"><canvas id="vertOscChart"></canvas></div>
-      <div class="chart-container"><canvas id="contactChart"></canvas></div>
-      <div class="chart-container"><canvas id="frontalChart"></canvas></div>
+    <div class="charts-section">
+      <h3>📊 Per-Step Charts</h3>
+      <div class="chart-container"><canvas id="strideChart"></canvas></div>
+      <div class="chart-container"><canvas id="stanceChart"></canvas></div>
+      <div class="chart-container"><canvas id="kneeMinChart"></canvas></div>
     </div>
 
     <div class="info-section">
-      <h3>📋 How to Use (Treadmill)</h3>
+      <h3>📋 Notes</h3>
       <ul>
-        <li>Click <strong>"Start Camera"</strong> and allow camera permission (rear camera on mobile recommended).</li>
-        <li>For sagittal analysis, place the camera side-on; for frontal analysis, face the treadmill frontally with full body visible.</li>
-        <li>Run at a steady pace for at least 20–30 seconds to stabilize metrics.</li>
-        <li>Click <strong>"Start Recording"</strong> to log gait metrics; stop when enough data are collected.</li>
-        <li>Click <strong>"Export CSV"</strong> to download full time-series and summary statistics.</li>
+        <li>Step detection is based on ankle contact vs an adaptive ground baseline (camera-dependent).</li>
+        <li>For frontal view, “valgus” here is a proxy (2D medial knee drift), not a clinical 3D measure.</li>
+        <li>iPhone export uses Share sheet (Save to Files). Fully automatic saving isn’t permitted by iOS.</li>
       </ul>
-    </div>
-
-    <div class="github-footer">
-      <p>🚀 <strong>Gait Analysis System</strong> - Educational Research Tool</p>
-      <p style="margin-top: 10px;">Built with TensorFlow.js MoveNet and Chart.js.[web:4][web:16]</p>
-      <p style="margin-top: 10px; font-size: 14px; color: #666;">
-        For educational and research purposes only. Not a medical device.[web:32]
-      </p>
     </div>
   </div>
 
   <script>
-    // =========================
+    // ============================================================
     // Globals
-    // =========================
+    // ============================================================
     let detector;
-    let webcam;
-    let canvas;
-    let ctx;
+    let webcam, canvas, ctx;
     let animationId;
     let isRunning = false;
     let isRecording = false;
 
-    let recordedData = [];
-    let stepHistory = [];
-    let kneeAngles = [];
-    let kneeAnglesRight = [];
-    let comHeights = [];
-    let contactDurations = [];
-    let detectedIssues = new Set();
-    let lastStepTime = 0;
-    let currentPhase = 'standing';
-    let sessionStartTime = 0;
-    let lastPhase = 'standing';
-    let lastPhaseChangeTime = 0;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
     let subjectData = { sex: 'male', age: 30, mass: 70, height: 170 };
 
-    let segmentIssues = {
-      leftUpperLeg: false, rightUpperLeg: false,
-      leftLowerLeg: false, rightLowerLeg: false,
-      leftFoot: false, rightFoot: false,
-      hip: false
-    };
-
     // FPS
-    let fps = 0;
-    let frameCount = 0;
-    let fpsUpdateTime = 0;
+    let fps = 0, frameCount = 0, fpsUpdateTime = 0;
 
-    // Chart data
-    let chartData = {
-      timestamps: [],
-      kneeFlexionLeft: [],
-      kneeFlexionRight: [],
-      cadence: [],
-      hipDrop: [],
-      verticalOsc: [],
-      contactTime: [],
-      pelvicDropFrontal: [],
-      kneeFpaaLeft: [],
-      kneeFpaaRight: []
-    };
-
+    // UI
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const recordBtn = document.getElementById('recordBtn');
     const exportBtn = document.getElementById('exportBtn');
+    const snapshotBtn = document.getElementById('snapshotBtn');
     const statusDiv = document.getElementById('status');
 
-    let kneeChart, cadenceChart, hipChart, vertOscChart, contactChart, frontalChart;
+    const viewModeEl = document.getElementById('viewMode');
+    const modePill = document.getElementById('modePill');
+    const modeMetricLabel = document.getElementById('modeMetricLabel');
+    const modeMetricValue = document.getElementById('modeMetricValue');
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    // Issues (de-dupe)
+    let detectedIssues = new Set();
 
-    // =========================
+    // ============================================================
     // Charts
-    // =========================
+    // ============================================================
+    let strideChart, stanceChart, kneeMinChart;
+
     function initCharts() {
       const commonOptions = {
         responsive: true,
         maintainAspectRatio: true,
         animation: false,
         scales: {
-          x: { display: true, title: { display: true, text: 'Time (s)' } },
+          x: { display: true, title: { display: true, text: 'Step #' } },
           y: { display: true, beginAtZero: false }
         },
         plugins: { legend: { display: true } }
       };
 
-      kneeChart = new Chart(document.getElementById('kneeFlexionChart'), {
+      strideChart = new Chart(document.getElementById('strideChart'), {
         type: 'line',
         data: {
           labels: [],
           datasets: [{
-            label: 'Left Knee Flexion (°)',
+            label: 'Stride Length (cm)',
             data: [],
-            borderColor: '#667eea',
-            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-            tension: 0.4
-          }, {
-            label: 'Right Knee Flexion (°)',
-            data: [],
-            borderColor: '#764ba2',
-            backgroundColor: 'rgba(118, 75, 162, 0.1)',
-            tension: 0.4
+            tension: 0.35
           }]
         },
         options: {
           ...commonOptions,
           scales: {
             ...commonOptions.scales,
-            y: { ...commonOptions.scales.y, title: { display: true, text: 'Angle (°)' }, suggestedMin: 120, suggestedMax: 180 }
+            y: { ...commonOptions.scales.y, title: { display: true, text: 'cm' }, suggestedMin: 50, suggestedMax: 200 }
           }
         }
       });
 
-      cadenceChart = new Chart(document.getElementById('cadenceChart'), {
+      stanceChart = new Chart(document.getElementById('stanceChart'), {
         type: 'line',
         data: {
           labels: [],
           datasets: [{
-            label: 'Cadence (steps/min)',
+            label: 'Stance Time (s)',
             data: [],
-            borderColor: '#27ae60',
-            backgroundColor: 'rgba(39, 174, 96, 0.1)',
-            tension: 0.4
+            tension: 0.35
+          },{
+            label: 'Swing Time (s)',
+            data: [],
+            tension: 0.35
           }]
         },
         options: {
           ...commonOptions,
           scales: {
             ...commonOptions.scales,
-            y: { ...commonOptions.scales.y, title: { display: true, text: 'Steps/min' }, suggestedMin: 140, suggestedMax: 200 }
+            y: { ...commonOptions.scales.y, title: { display: true, text: 'seconds' }, suggestedMin: 0.1, suggestedMax: 0.8 }
           }
         }
       });
 
-      hipChart = new Chart(document.getElementById('hipDropChart'), {
+      kneeMinChart = new Chart(document.getElementById('kneeMinChart'), {
         type: 'line',
         data: {
           labels: [],
           datasets: [{
-            label: 'Hip Drop (Sagittal, °)',
+            label: 'Knee Min L (°)',
             data: [],
-            borderColor: '#e74c3c',
-            backgroundColor: 'rgba(231, 76, 60, 0.1)',
-            tension: 0.4
+            tension: 0.35
+          },{
+            label: 'Knee Min R (°)',
+            data: [],
+            tension: 0.35
           }]
         },
         options: {
           ...commonOptions,
           scales: {
             ...commonOptions.scales,
-            y: { ...commonOptions.scales.y, title: { display: true, text: 'Hip Drop (°)' }, suggestedMin: 0, suggestedMax: 15 }
-          }
-        }
-      });
-
-      vertOscChart = new Chart(document.getElementById('vertOscChart'), {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [{
-            label: 'Vertical Oscillation (cm)',
-            data: [],
-            borderColor: '#f39c12',
-            backgroundColor: 'rgba(243, 156, 18, 0.1)',
-            tension: 0.4
-          }]
-        },
-        options: {
-          ...commonOptions,
-          scales: {
-            ...commonOptions.scales,
-            y: { ...commonOptions.scales.y, title: { display: true, text: 'Oscillation (cm)' }, suggestedMin: 0, suggestedMax: 10 }
-          }
-        }
-      });
-
-      contactChart = new Chart(document.getElementById('contactChart'), {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [{
-            label: 'Ground Contact Time (ms)',
-            data: [],
-            borderColor: '#16a085',
-            backgroundColor: 'rgba(22, 160, 133, 0.1)',
-            tension: 0.4
-          }]
-        },
-        options: {
-          ...commonOptions,
-          scales: {
-            ...commonOptions.scales,
-            y: { ...commonOptions.scales.y, title: { display: true, text: 'Contact Time (ms)' }, suggestedMin: 150, suggestedMax: 400 }
-          }
-        }
-      });
-
-      frontalChart = new Chart(document.getElementById('frontalChart'), {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [
-            {
-              label: 'Pelvic Drop (Frontal, °)',
-              data: [],
-              borderColor: '#e67e22',
-              backgroundColor: 'rgba(230, 126, 34, 0.1)',
-              tension: 0.4
-            },
-            {
-              label: 'Knee FPPA Left (°)',
-              data: [],
-              borderColor: '#c0392b',
-              backgroundColor: 'rgba(192, 57, 43, 0.1)',
-              tension: 0.4
-            },
-            {
-              label: 'Knee FPPA Right (°)',
-              data: [],
-              borderColor: '#2980b9',
-              backgroundColor: 'rgba(41, 128, 185, 0.1)',
-              tension: 0.4
-            }
-          ]
-        },
-        options: {
-          ...commonOptions,
-          scales: {
-            ...commonOptions.scales,
-            y: { ...commonOptions.scales.y, title: { display: true, text: 'Angle (°)' }, beginAtZero: false }
+            y: { ...commonOptions.scales.y, title: { display: true, text: 'degrees' }, suggestedMin: 80, suggestedMax: 180 }
           }
         }
       });
     }
 
-    function updateCharts() {
-      if (!isRecording || chartData.timestamps.length === 0) return;
+    function updateChartsFromSteps() {
+      const steps = gait.steps;
+      const maxPoints = 90;
+      const start = Math.max(0, steps.length - maxPoints);
+      const slice = steps.slice(start);
+      const labels = slice.map((s) => String(s.idx));
 
-      const maxPoints = 100;
-      const startIdx = Math.max(0, chartData.timestamps.length - maxPoints);
-      const labels = chartData.timestamps.slice(startIdx);
+      strideChart.data.labels = labels;
+      strideChart.data.datasets[0].data = slice.map(s => (typeof s.strideCm === 'number') ? s.strideCm : null);
+      strideChart.update('none');
 
-      kneeChart.data.labels = labels;
-      kneeChart.data.datasets[0].data = chartData.kneeFlexionLeft.slice(startIdx);
-      kneeChart.data.datasets[1].data = chartData.kneeFlexionRight.slice(startIdx);
-      kneeChart.update('none');
+      stanceChart.data.labels = labels;
+      stanceChart.data.datasets[0].data = slice.map(s => (typeof s.stanceTimeS === 'number') ? s.stanceTimeS : null);
+      stanceChart.data.datasets[1].data = slice.map(s => (typeof s.swingTimeS === 'number') ? s.swingTimeS : null);
+      stanceChart.update('none');
 
-      cadenceChart.data.labels = labels;
-      cadenceChart.data.datasets[0].data = chartData.cadence.slice(startIdx);
-      cadenceChart.update('none');
-
-      hipChart.data.labels = labels;
-      hipChart.data.datasets[0].data = chartData.hipDrop.slice(startIdx);
-      hipChart.update('none');
-
-      vertOscChart.data.labels = labels;
-      vertOscChart.data.datasets[0].data = chartData.verticalOsc.slice(startIdx);
-      vertOscChart.update('none');
-
-      contactChart.data.labels = labels;
-      contactChart.data.datasets[0].data = chartData.contactTime.slice(startIdx);
-      contactChart.update('none');
-
-      frontalChart.data.labels = labels;
-      frontalChart.data.datasets[0].data = chartData.pelvicDropFrontal.slice(startIdx);
-      frontalChart.data.datasets[1].data = chartData.kneeFpaaLeft.slice(startIdx);
-      frontalChart.data.datasets[2].data = chartData.kneeFpaaRight.slice(startIdx);
-      frontalChart.update('none');
+      kneeMinChart.data.labels = labels;
+      kneeMinChart.data.datasets[0].data = slice.map(s => (s.side === 'L' && typeof s.kneeMinDeg === 'number') ? s.kneeMinDeg : null);
+      kneeMinChart.data.datasets[1].data = slice.map(s => (s.side === 'R' && typeof s.kneeMinDeg === 'number') ? s.kneeMinDeg : null);
+      kneeMinChart.update('none');
     }
 
-    // =========================
-    // TFJS backend
-    // =========================
+    // ============================================================
+    // Gait State (CONCURRENT LEFT/RIGHT)
+    // ============================================================
+    const gait = {
+      feet: {
+        L: makeFootState('L'),
+        R: makeFootState('R'),
+      },
+      steps: [],                 // finalized steps (both sides interleaved)
+      icTimes: [],               // for cadence (ms)
+      recentWindow: 6
+    };
+
+    function makeFootState(side) {
+      return {
+        side,
+        groundY: null,
+        contact: false,
+        prev: { t: 0, x: 0, y: 0, ok: false },
+        active: null,            // active stance step object
+        lastTO: null,            // ms
+        lastIC: null,            // ms
+        lastIC_hipX: null        // px at IC (hip-mid X)
+      };
+    }
+
+    function resetGaitAll() {
+      gait.feet.L = makeFootState('L');
+      gait.feet.R = makeFootState('R');
+      gait.steps = [];
+      gait.icTimes = [];
+      detectedIssues = new Set();
+
+      document.getElementById('issuesList').innerHTML =
+        '<div style="text-align:center; color:#999; padding:20px;">No issues detected yet</div>';
+
+      // reset UI
+      document.getElementById('cadence').innerHTML = `0<span class="metric-unit">steps/min</span>`;
+      document.getElementById('stanceTime').innerHTML = `0<span class="metric-unit">s</span>`;
+      document.getElementById('swingTime').innerHTML = `0<span class="metric-unit">s</span>`;
+      document.getElementById('strideLength').innerHTML = `0<span class="metric-unit">cm</span>`;
+      document.getElementById('kneeMinL').innerHTML = `0<span class="metric-unit">°</span>`;
+      document.getElementById('kneeMinR').innerHTML = `0<span class="metric-unit">°</span>`;
+      document.getElementById('hipDrop').innerHTML = `0<span class="metric-unit">°</span>`;
+      document.getElementById('stepWidth').innerHTML = `0<span class="metric-unit">cm</span>`;
+      modeMetricValue.textContent = (viewMode() === 'sagittal') ? 'Low' : '0°';
+
+      // charts
+      if (strideChart) { strideChart.data.labels = []; strideChart.data.datasets[0].data = []; strideChart.update('none'); }
+      if (stanceChart) { stanceChart.data.labels = []; stanceChart.data.datasets[0].data = []; stanceChart.data.datasets[0].data = []; stanceChart.update('none'); }
+      if (kneeMinChart) { kneeMinChart.data.labels = []; kneeMinChart.data.datasets[0].data = []; kneeMinChart.data.datasets[1].data = []; kneeMinChart.update('none'); }
+    }
+
+    // ============================================================
+    // TFJS backend init (fix WebGPU init error)
+    // ============================================================
     async function initTFBackend() {
       await tf.ready();
-      const preferredBackends = (isIOS || isSafari) ? ['webgl', 'cpu'] : ['webgpu', 'webgl', 'cpu'];
+      const preferred = (isIOS || isSafari) ? ['webgl', 'cpu'] : ['webgpu', 'webgl', 'cpu'];
+
       let ok = false;
-      for (const b of preferredBackends) {
+      for (const b of preferred) {
         try {
           await tf.setBackend(b);
           await tf.ready();
           ok = true;
           break;
-        } catch (e) {}
+        } catch (_) {}
       }
       if (!ok) throw new Error('No TFJS backend could be initialized.');
       return tf.getBackend();
@@ -679,40 +543,56 @@
       try {
         statusDiv.className = 'status loading';
         statusDiv.innerHTML = '<span class="loading-spinner"></span> Loading TensorFlow backend...';
-
         const backend = await initTFBackend();
 
         statusDiv.className = 'status loading';
-        statusDiv.innerHTML = '<span class="loading-spinner"></span> Loading MoveNet model...';
-
-        const modelType = (isIOS || isSafari)
-          ? poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
-          : poseDetection.movenet.modelType.SINGLEPOSE_THUNDER;
+        statusDiv.innerHTML = `<span class="loading-spinner"></span> Loading MoveNet (backend: ${backend})...`;
 
         detector = await poseDetection.createDetector(
           poseDetection.SupportedModels.MoveNet,
           {
-            modelType,
+            modelType: (isIOS || isSafari)
+              ? poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
+              : poseDetection.movenet.modelType.SINGLEPOSE_THUNDER,
             enableTracking: true,
             trackerType: poseDetection.TrackerType.BoundingBox
           }
         );
 
         initCharts();
+        syncModeUI();
 
         statusDiv.className = 'status ready';
-        statusDiv.innerHTML = '✓ AI Model Ready (backend: ' + backend + ') - Click "Start Camera" to begin';
+        statusDiv.innerHTML = `✓ AI Model Ready (backend: ${backend}) - Click "Start Camera"`;
         startBtn.disabled = false;
-      } catch (error) {
+      } catch (e) {
         statusDiv.className = 'status error';
-        statusDiv.innerHTML = '✗ Error loading model: ' + (error?.message || error);
-        console.error('Initialization error:', error);
+        statusDiv.innerHTML = '✗ Error loading model: ' + (e?.message || e);
+        console.error(e);
       }
     }
 
-    // =========================
-    // Camera
-    // =========================
+    function viewMode() {
+      return viewModeEl.value; // 'sagittal' | 'frontal'
+    }
+
+    function syncModeUI() {
+      const m = viewMode();
+      modePill.textContent = m.toUpperCase();
+      if (m === 'sagittal') {
+        modePill.style.background = '#667eea';
+        modeMetricLabel.textContent = 'Overstride Risk (last IC)';
+        modeMetricValue.textContent = 'Low';
+      } else {
+        modePill.style.background = '#e67e22';
+        modeMetricLabel.textContent = 'Knee Medial Drift (proxy) - last';
+        modeMetricValue.textContent = '0°';
+      }
+    }
+
+    // ============================================================
+    // Camera (iOS-safe constraints)
+    // ============================================================
     async function startCamera() {
       try {
         webcam = document.getElementById('webcam');
@@ -725,89 +605,69 @@
         webcam.setAttribute('muted', '');
         webcam.setAttribute('autoplay', '');
 
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('getUserMedia not supported in this browser.');
-        }
-
         const tryConstraints = [
-          {
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              frameRate: { ideal: 120 }
-            }
-          },
-          {
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              frameRate: { ideal: 60 }
-            }
-          },
+          { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 120 } } },
+          { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } },
           { video: { facingMode: 'environment' } }
         ];
 
-        let stream = null;
-        let lastErr = null;
+        let stream = null, lastErr = null;
         for (const c of tryConstraints) {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia(c);
-            break;
-          } catch (e) {
-            lastErr = e;
-          }
+          try { stream = await navigator.mediaDevices.getUserMedia(c); break; }
+          catch (e) { lastErr = e; }
         }
-        if (!stream) throw lastErr || new Error('Unable to access camera.');
+        if (!stream) throw lastErr || new Error('Unable to access camera');
 
         webcam.srcObject = stream;
-
-        await new Promise((resolve) => {
-          webcam.onloadeddata = () => resolve();
-        });
-
+        await new Promise(res => webcam.onloadeddata = () => res());
         await webcam.play();
 
         canvas.width = webcam.videoWidth || 640;
         canvas.height = webcam.videoHeight || 480;
 
+        resetGaitAll();
+
         isRunning = true;
         startBtn.disabled = true;
         stopBtn.disabled = false;
         recordBtn.disabled = false;
+        snapshotBtn.disabled = false;
+        exportBtn.disabled = true;
 
         statusDiv.className = 'status ready';
-        statusDiv.innerHTML = '🎥 Camera Active - Ready to Analyze';
+        statusDiv.innerHTML = '🎥 Camera Active - Ready';
 
         fpsUpdateTime = performance.now();
+        frameCount = 0;
         detectPose();
 
+        // Negotiated camera fps
         const track = stream.getVideoTracks()[0];
         const settings = track.getSettings ? track.getSettings() : {};
         const gotFps = settings.frameRate ? Math.round(settings.frameRate) : '?';
-        document.getElementById('fpsDisplay').textContent = 'FPS: 0 (Cam: ' + gotFps + ')';
-      } catch (error) {
+        document.getElementById('fpsDisplay').textContent = `FPS: 0 (Cam: ${gotFps})`;
+      } catch (e) {
         statusDiv.className = 'status error';
-        statusDiv.innerHTML = '✗ Camera Error: ' + (error?.message || error);
-        console.error('Camera error:', error);
+        statusDiv.innerHTML = '✗ Camera Error: ' + (e?.message || e);
+        console.error(e);
       }
     }
 
     function stopCamera() {
       if (webcam && webcam.srcObject) {
-        webcam.srcObject.getTracks().forEach(track => track.stop());
+        webcam.srcObject.getTracks().forEach(t => t.stop());
         webcam.srcObject = null;
       }
       if (animationId) cancelAnimationFrame(animationId);
 
       isRunning = false;
-
-      if (isRecording) toggleRecording();
+      if (isRecording) toggleRecording(); // stop recording cleanly
 
       startBtn.disabled = false;
       stopBtn.disabled = true;
       recordBtn.disabled = true;
+      exportBtn.disabled = true;
+      snapshotBtn.disabled = true;
 
       if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -816,541 +676,446 @@
       document.getElementById('fpsDisplay').textContent = 'FPS: 0';
     }
 
-    // =========================
+    // ============================================================
     // Pose loop
-    // =========================
+    // ============================================================
     async function detectPose() {
       if (!isRunning) return;
 
-      const currentTime = performance.now();
+      const now = performance.now();
+
+      // FPS calc
       frameCount++;
-      if (currentTime - fpsUpdateTime >= 1000) {
-        fps = Math.round(frameCount * 1000 / (currentTime - fpsUpdateTime));
-        document.getElementById('fpsDisplay').textContent = 'FPS: ' + fps;
+      if (now - fpsUpdateTime >= 1000) {
+        fps = Math.round(frameCount * 1000 / (now - fpsUpdateTime));
+        document.getElementById('fpsDisplay').textContent = `FPS: ${fps}`;
         frameCount = 0;
-        fpsUpdateTime = currentTime;
+        fpsUpdateTime = now;
       }
 
       try {
         const poses = await detector.estimatePoses(webcam);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (poses.length > 0) {
-          const pose = poses[0];
-          const keypoints = pose.keypoints;
-
-          drawSkeleton(keypoints);
-          analyzeGait(keypoints, currentTime);
+        if (poses.length > 0 && poses[0]?.keypoints?.length) {
+          const kps = poses[0].keypoints;
+          drawSkeleton(kps);
+          analyzePerFrame(kps, now);
         }
-      } catch (error) {
-        console.error('Pose detection error:', error);
+      } catch (e) {
+        console.error('Pose error:', e);
       }
 
       animationId = requestAnimationFrame(detectPose);
     }
 
+    // ============================================================
+    // Drawing
+    // ============================================================
     function drawSkeleton(keypoints) {
-      segmentIssues = {
-        leftUpperLeg: false, rightUpperLeg: false,
-        leftLowerLeg: false, rightLowerLeg: false,
-        leftFoot: false, rightFoot: false,
-        hip: false
-      };
-
-      const connections = [
-        { points: [5, 7], color: '#3498db', segment: null },
-        { points: [7, 9], color: '#3498db', segment: null },
-        { points: [5, 11], color: '#3498db', segment: null },
-        { points: [11, 13], color: '#3498db', segment: 'leftUpperLeg' },
-        { points: [13, 15], color: '#3498db', segment: 'leftLowerLeg' },
-
-        { points: [6, 8], color: '#2ecc71', segment: null },
-        { points: [8, 10], color: '#2ecc71', segment: null },
-        { points: [6, 12], color: '#2ecc71', segment: null },
-        { points: [12, 14], color: '#2ecc71', segment: 'rightUpperLeg' },
-        { points: [14, 16], color: '#2ecc71', segment: 'rightLowerLeg' },
-
-        { points: [5, 6], color: '#9b59b6', segment: null },
-        { points: [11, 12], color: '#9b59b6', segment: 'hip' }
+      const conns = [
+        { a: 5, b: 7, c: '#3498db' }, { a: 7, b: 9, c: '#3498db' },
+        { a: 5, b: 11, c: '#3498db' }, { a: 11, b: 13, c: '#3498db' }, { a: 13, b: 15, c: '#3498db' },
+        { a: 6, b: 8, c: '#2ecc71' }, { a: 8, b: 10, c: '#2ecc71' },
+        { a: 6, b: 12, c: '#2ecc71' }, { a: 12, b: 14, c: '#2ecc71' }, { a: 14, b: 16, c: '#2ecc71' },
+        { a: 5, b: 6, c: '#9b59b6' }, { a: 11, b: 12, c: '#9b59b6' }
       ];
 
       ctx.lineWidth = 5;
-
-      connections.forEach(conn => {
-        const [i, j] = conn.points;
-        const kp1 = keypoints[i];
-        const kp2 = keypoints[j];
-
-        if (kp1 && kp2 && kp1.score > 0.3 && kp2.score > 0.3) {
-          let strokeColor = conn.color;
-          if (conn.segment && segmentIssues[conn.segment]) strokeColor = '#e74c3c';
-          ctx.strokeStyle = strokeColor;
+      for (const conn of conns) {
+        const p1 = keypoints[conn.a], p2 = keypoints[conn.b];
+        if (p1?.score > 0.3 && p2?.score > 0.3) {
+          ctx.strokeStyle = conn.c;
           ctx.beginPath();
-          ctx.moveTo(kp1.x, kp1.y);
-          ctx.lineTo(kp2.x, kp2.y);
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
           ctx.stroke();
         }
-      });
+      }
 
-      keypoints.forEach((kp, idx) => {
-        if (kp.score > 0.3) {
+      for (let i = 0; i < keypoints.length; i++) {
+        const kp = keypoints[i];
+        if (kp?.score > 0.3) {
           ctx.beginPath();
-          ctx.arc(kp.x, kp.y, 8, 0, 2 * Math.PI);
-
-          if ([5, 7, 9, 11, 13, 15].includes(idx)) ctx.fillStyle = '#3498db';
-          else if ([6, 8, 10, 12, 14, 16].includes(idx)) ctx.fillStyle = '#2ecc71';
+          ctx.arc(kp.x, kp.y, 8, 0, 2*Math.PI);
+          if ([5,7,9,11,13,15].includes(i)) ctx.fillStyle = '#3498db';
+          else if ([6,8,10,12,14,16].includes(i)) ctx.fillStyle = '#2ecc71';
           else ctx.fillStyle = '#9b59b6';
-
           ctx.fill();
-          ctx.strokeStyle = 'white';
+          ctx.strokeStyle = '#fff';
           ctx.lineWidth = 2;
           ctx.stroke();
         }
-      });
+      }
     }
 
-    // =========================
-    // Gait analysis
-    // =========================
-    function getConfidenceLevel(keypoints, indices) {
-      const scores = indices.map(i => keypoints[i]?.score || 0);
-      const avg = scores.reduce((a,b) => a + b, 0) / scores.length;
-      return Math.round(avg * 100);
-    }
-
-    function analyzeGait(keypoints, timestamp) {
-      const kpMap = {};
-      keypoints.forEach((kp, i) => kpMap[i] = kp);
-
+    // ============================================================
+    // Per-frame analysis (concurrent L/R)
+    // ============================================================
+    function analyzePerFrame(kps, tNow) {
+      // Subject
       subjectData.sex = document.getElementById('subjectSex').value;
-      subjectData.age = parseFloat(document.getElementById('subjectAge').value);
-      subjectData.mass = parseFloat(document.getElementById('subjectMass').value);
-      subjectData.height = parseFloat(document.getElementById('subjectHeight').value);
+      subjectData.age = parseFloat(document.getElementById('subjectAge').value || '0');
+      subjectData.mass = parseFloat(document.getElementById('subjectMass').value || '0');
+      subjectData.height = parseFloat(document.getElementById('subjectHeight').value || '0');
 
-      const conf = getConfidenceLevel(keypoints, [0,5,6,11,12,13,14,15,16]);
-      document.getElementById('confDisplay').textContent = 'Conf: ' + conf + '%';
-      if (conf < 60) {
-        addIssue('warning', 'Low tracking confidence (' + conf + '%)');
+      const m = viewMode();
+      const get = (i) => (kps[i] && kps[i].score > 0.3) ? kps[i] : null;
+
+      const nose = get(0);
+      const hipL = get(11), hipR = get(12);
+      const kneeL = get(13), kneeR = get(14);
+      const ankleL = get(15), ankleR = get(16);
+
+      if (!ankleL && !ankleR) return;
+
+      const pxToCm = estimatePxToCm(nose, ankleL, ankleR, subjectData.height);
+
+      // Step width (frontal only meaningful, but safe to show always)
+      const stepWidthCm = (ankleL && ankleR && pxToCm) ? Math.abs(ankleL.x - ankleR.x) * pxToCm : 0;
+      document.getElementById('stepWidth').innerHTML = `${stepWidthCm.toFixed(0)}<span class="metric-unit">cm</span>`;
+
+      // Hip drop (always)
+      const hipDropDeg = computeHipDropDeg(hipL, hipR);
+
+      // Knee angles
+      const kneeDegL = (hipL && kneeL && ankleL) ? calculateAngle(hipL, kneeL, ankleL) : null;
+      const kneeDegR = (hipR && kneeR && ankleR) ? calculateAngle(hipR, kneeR, ankleR) : null;
+
+      // Frontal knee medial drift proxy (degrees-ish)
+      // We treat "medial drift" as how much the knee is shifted toward body midline relative to hip & ankle
+      const kneeMedialDrift = (m === 'frontal') ? computeKneeMedialDriftProxyDeg(hipL, kneeL, ankleL, hipR, kneeR, ankleR) : null;
+      if (m === 'frontal') {
+        modeMetricValue.textContent = (kneeMedialDrift != null) ? `${kneeMedialDrift.toFixed(1)}°` : '0°';
       }
 
-      let currentData = {
-        timestamp: isRecording ? ((timestamp - sessionStartTime) / 1000).toFixed(2) : 0,
-        kneeFlexionLeft: 0,
-        kneeFlexionRight: 0,
-        hipDrop: 0,
-        cadence: 0,
-        grfLeft: 0,
-        grfRight: 0,
-        overstride: 'Low',
-        verticalOsc: 0,
-        contactTime: 0,
-        stanceFlightRatio: 0,
-        footStrike: 'Unknown',
-        gaitPhase: currentPhase,
-        pelvicDropFrontal: 0,
-        kneeFpaaLeft: 0,
-        kneeFpaaRight: 0,
-        stepWidth: 0,
-        issues: []
+      // Update each foot contact + events independently
+      handleFoot('L', tNow, ankleL, hipL, hipR, kneeDegL, hipDropDeg, pxToCm);
+      handleFoot('R', tNow, ankleR, hipL, hipR, kneeDegR, hipDropDeg, pxToCm);
+
+      // UI phase label (simple view)
+      updatePhaseUI(gait.feet.L.contact, gait.feet.R.contact);
+
+      // Cadence from last IC times
+      updateCadenceUI();
+
+      // Averages and last-step UI
+      updateRollingUI();
+
+      // Enable export if we have steps
+      exportBtn.disabled = gait.steps.length === 0;
+    }
+
+    function handleFoot(side, tNow, ankle, hipL, hipR, kneeDeg, hipDropDeg, pxToCm) {
+      const f = gait.feet[side];
+      if (!ankle) return;
+
+      // ground baseline (slowly follows maximum y)
+      const alpha = 0.05;
+      if (f.groundY == null) f.groundY = ankle.y;
+      f.groundY = (1 - alpha) * f.groundY + alpha * Math.max(f.groundY, ankle.y);
+
+      // contact with hysteresis
+      const thrOn = 18;   // enter contact
+      const thrOff = 26;  // exit contact
+      const dist = f.groundY - ankle.y; // smaller means closer to ground baseline
+
+      let contactNow = f.contact;
+      if (!f.contact && dist < thrOn) contactNow = true;
+      if (f.contact && dist > thrOff) contactNow = false;
+
+      // vertical velocity
+      const dt = Math.max(1e-3, (tNow - f.prev.t) / 1000);
+      const vY = (f.prev.ok) ? (ankle.y - f.prev.y) / dt : 0;
+
+      const ic = (!f.contact && contactNow && vY > -400);
+      const to = (f.contact && !contactNow);
+
+      // IC event
+      if (ic) {
+        onInitialContact(side, tNow, ankle, hipL, hipR, pxToCm);
+
+        // update other metrics at IC (mode-dependent)
+        if (viewMode() === 'sagittal') {
+          const hipMidX = midX(hipL, hipR);
+          const over = computeOverstrideRisk(hipMidX, ankle, canvas.height || 1);
+          modeMetricValue.textContent = over.level;
+          if (over.level === 'High') addIssue('critical', `${side}: Overstriding at IC`);
+          else if (over.level === 'Moderate') addIssue('warning', `${side}: Moderate overstride at IC`);
+        }
+      }
+
+      // If in stance, accumulate
+      if (f.active && f.active.inStance) {
+        if (kneeDeg != null) f.active.kneeMinDeg = Math.min(f.active.kneeMinDeg, kneeDeg);
+        if (hipDropDeg != null) f.active.hipDropMaxDeg = Math.max(f.active.hipDropMaxDeg, hipDropDeg);
+      }
+
+      // TO event
+      if (to) {
+        onToeOff(side, tNow);
+      }
+
+      // persist
+      f.contact = contactNow;
+      f.prev = { t: tNow, x: ankle.x, y: ankle.y, ok: true };
+    }
+
+    function onInitialContact(side, tIC, ankle, hipL, hipR, pxToCm) {
+      if (!isRecording) return;
+
+      const f = gait.feet[side];
+      const hipMidX = midX(hipL, hipR);
+
+      // 1) Swing time for the *previous* step of this same foot (TO -> this IC)
+      const lastStepSameFoot = findLastStepOfSide(side);
+      if (lastStepSameFoot && typeof lastStepSameFoot.tTO_ms === 'number' && typeof lastStepSameFoot.swingTimeS !== 'number') {
+        lastStepSameFoot.swingTimeS = (tIC - lastStepSameFoot.tTO_ms) / 1000;
+      }
+
+      // 2) Stride length for the *previous* same-foot IC (IC -> this IC), using hipMidX displacement
+      if (pxToCm && f.lastIC != null && f.lastIC_hipX != null && hipMidX != null) {
+        const strideCm = Math.abs(hipMidX - f.lastIC_hipX) * pxToCm;
+        if (lastStepSameFoot && typeof lastStepSameFoot.strideCm !== 'number') {
+          lastStepSameFoot.strideCm = strideCm;
+        }
+      }
+
+      // 3) Create NEW active stance step for this foot
+      f.active = {
+        side,
+        idx: gait.steps.length + 1, // provisional; we assign on finalize
+        tIC_ms: tIC,
+        tTO_ms: null,
+        inStance: true,
+        stanceTimeS: null,
+        swingTimeS: null,
+        strideCm: null,
+        kneeMinDeg: 999,
+        hipDropMaxDeg: 0,
+        overstrideLevel: null,
+        overstrideRatio: null,
+        notes: ''
       };
 
-      const grfData = calculateGroundReactionForce(subjectData);
-      currentData.grfLeft = grfData.left;
-      currentData.grfRight = grfData.right;
-      document.getElementById('grfLeft').innerHTML = Math.round(grfData.left) + '<span class="metric-unit">N</span>';
-      document.getElementById('grfRight').innerHTML = Math.round(grfData.right) + '<span class="metric-unit">N</span>';
+      // 4) Update cadence IC times
+      gait.icTimes.push(tIC);
+      if (gait.icTimes.length > 12) gait.icTimes.shift();
 
-      // Left knee flexion
-      if (kpMap[11] && kpMap[13] && kpMap[15]) {
-        const angle = calculateAngle(kpMap[11], kpMap[13], kpMap[15]);
-        kneeAngles.push(angle);
-        if (kneeAngles.length > 30) kneeAngles.shift();
+      // 5) Update stored IC references for stride calc next time
+      f.lastIC = tIC;
+      f.lastIC_hipX = (hipMidX != null) ? hipMidX : null;
 
-        document.getElementById('kneeAngle').innerHTML = Math.round(angle) + '<span class="metric-unit">°</span>';
-        currentData.kneeFlexionLeft = Math.round(angle);
-
-        if (angle > 165) {
-          const issue = 'Insufficient left knee flexion';
-          addIssue('warning', issue);
-          currentData.issues.push(issue);
-          segmentIssues.leftUpperLeg = true;
-          segmentIssues.leftLowerLeg = true;
-        }
-      }
-
-      // Right knee flexion
-      if (kpMap[12] && kpMap[14] && kpMap[16]) {
-        const angle = calculateAngle(kpMap[12], kpMap[14], kpMap[16]);
-        kneeAnglesRight.push(angle);
-        if (kneeAnglesRight.length > 30) kneeAnglesRight.shift();
-
-        document.getElementById('kneeAngleRight').innerHTML = Math.round(angle) + '<span class="metric-unit">°</span>';
-        currentData.kneeFlexionRight = Math.round(angle);
-
-        if (angle > 165) {
-          const issue = 'Insufficient right knee flexion';
-          addIssue('warning', issue);
-          currentData.issues.push(issue);
-          segmentIssues.rightUpperLeg = true;
-          segmentIssues.rightLowerLeg = true;
-        }
-      }
-
-      // Hip drop (sagittal approximation)
-      if (kpMap[11] && kpMap[12]) {
-        const hipDrop = Math.abs(kpMap[11].y - kpMap[12].y);
-        const hipDropAngle = Math.atan2(hipDrop, Math.abs(kpMap[11].x - kpMap[12].x) || 1) * 180 / Math.PI;
-
-        document.getElementById('hipDrop').innerHTML = hipDropAngle.toFixed(1) + '<span class="metric-unit">°</span>';
-        currentData.hipDrop = parseFloat(hipDropAngle.toFixed(1));
-
-        if (hipDropAngle > 8) {
-          const issue = 'Excessive hip drop (sagittal proxy)';
-          addIssue('critical', issue);
-          currentData.issues.push(issue);
-          segmentIssues.hip = true;
-        }
-      }
-
-      // Gait phase / contact time / stance-flight
-      const phaseInfo = detectContactPhase(kpMap);
-      currentData.gaitPhase = phaseInfo.phase;
-      currentData.contactTime = phaseInfo.contactTime;
-      currentData.stanceFlightRatio = phaseInfo.stanceFlightRatio;
-      if (phaseInfo.contactTime > 0) {
-        document.getElementById('contactTime').innerHTML =
-          Math.round(phaseInfo.contactTime) + '<span class="metric-unit">ms</span>';
-      }
-      document.getElementById('stanceFlightRatio').textContent = phaseInfo.stanceFlightRatio.toFixed(2);
-
-      // Cadence
-      const nowMs = Date.now();
-      const cadenceVal = computeCadence(nowMs);
-      currentData.cadence = cadenceVal;
-      if (cadenceVal > 0) {
-        document.getElementById('cadence').innerHTML =
-          cadenceVal + '<span class="metric-unit">steps/min</span>';
-        if (cadenceVal < 160) {
-          addIssue('warning', 'Low cadence - consider increasing step rate');
-          currentData.issues.push('Low cadence');
-        }
-      }
-
-      // Stride length
-      const strideLen = calculateStrideLength(kpMap);
-      if (strideLen > 0) {
-        currentData.strideLength = strideLen;
-        document.getElementById('strideLength').innerHTML =
-          strideLen.toFixed(0) + '<span class="metric-unit">cm</span>';
-      }
-
-      // Overstride
-      if (kpMap[11] && kpMap[15] && kpMap[0]) {
-        const hipAnkleDistance = Math.abs(kpMap[15].x - kpMap[11].x);
-        const bodyHeightPixels = Math.abs(kpMap[0].y - kpMap[15].y) || 1;
-        const overstrideRatio = hipAnkleDistance / bodyHeightPixels;
-
-        if (overstrideRatio > 0.3) {
-          currentData.overstride = 'High';
-          document.getElementById('overstride').textContent = 'High';
-          const issue = 'Overstriding detected';
-          addIssue('critical', issue);
-          currentData.issues.push(issue);
-          segmentIssues.leftLowerLeg = true;
-          segmentIssues.leftFoot = true;
-        } else if (overstrideRatio > 0.2) {
-          currentData.overstride = 'Moderate';
-          document.getElementById('overstride').textContent = 'Moderate';
-        } else {
-          currentData.overstride = 'Low';
-          document.getElementById('overstride').textContent = 'Low';
-        }
-      }
-
-      // Vertical oscillation
-      const vertOsc = calculateVerticalOscillation(kpMap);
-      if (vertOsc > 0) {
-        currentData.verticalOsc = vertOsc;
-        document.getElementById('verticalOscillation').innerHTML =
-          vertOsc.toFixed(1) + '<span class="metric-unit">cm</span>';
-      }
-
-      // Foot strike
-      const footStrike = detectFootStrike(kpMap);
-      currentData.footStrike = footStrike;
-      document.getElementById('footStrike').textContent = footStrike.replace('_', ' ');
-
-      // --- Frontal plane metrics ---
-      const pelvicDropFrontal = calculateFrontalPelvicDrop(kpMap);
-      currentData.pelvicDropFrontal = pelvicDropFrontal;
-      document.getElementById('pelvicDropFrontal').innerHTML =
-        pelvicDropFrontal.toFixed(1) + '<span class="metric-unit">°</span>';
-
-      const leftFPPA = calculateFPPA(kpMap[13], kpMap[11], kpMap[15]);
-      const rightFPPA = calculateFPPA(kpMap[14], kpMap[12], kpMap[16]);
-      currentData.kneeFpaaLeft = leftFPPA;
-      currentData.kneeFpaaRight = rightFPPA;
-      document.getElementById('kneeFpaaLeft').innerHTML =
-        leftFPPA.toFixed(1) + '<span class="metric-unit">°</span>';
-      document.getElementById('kneeFpaaRight').innerHTML =
-        rightFPPA.toFixed(1) + '<span class="metric-unit">°</span>';
-
-      const stepWidth = calculateStepWidth(kpMap);
-      currentData.stepWidth = stepWidth;
-      document.getElementById('stepWidth').innerHTML =
-        stepWidth.toFixed(1) + '<span class="metric-unit">cm</span>';
-
-      if (Math.abs(pelvicDropFrontal) > 10) {
-        addIssue('warning', 'Excessive frontal pelvic drop');
-        currentData.issues.push('Excessive frontal pelvic drop');
-      }
-      if (leftFPPA > 10 || rightFPPA > 10) {
-        addIssue('warning', 'Increased frontal knee valgus (FPPA)');
-        currentData.issues.push('Increased FPPA');
-      }
-
-      if (isRecording) {
-        recordedData.push(currentData);
-
-        chartData.timestamps.push(parseFloat(currentData.timestamp));
-        chartData.kneeFlexionLeft.push(currentData.kneeFlexionLeft);
-        chartData.kneeFlexionRight.push(currentData.kneeFlexionRight);
-        chartData.cadence.push(currentData.cadence);
-        chartData.hipDrop.push(currentData.hipDrop);
-        chartData.verticalOsc.push(currentData.verticalOsc);
-        chartData.contactTime.push(currentData.contactTime);
-        chartData.pelvicDropFrontal.push(currentData.pelvicDropFrontal);
-        chartData.kneeFpaaLeft.push(currentData.kneeFpaaLeft);
-        chartData.kneeFpaaRight.push(currentData.kneeFpaaRight);
-
-        if (recordedData.length % 10 === 0) updateCharts();
-      }
+      setPhaseIndicator(1);
     }
 
-    function calculateGroundReactionForce(subject) {
-      const g = 9.81;
-      const mass = subject.mass;
-      const bodyWeight = mass * g;
+    function onToeOff(side, tTO) {
+      if (!isRecording) return;
 
-      let grfLeft = 0;
-      let grfRight = 0;
+      const f = gait.feet[side];
+      if (!f.active || !f.active.inStance) return;
 
-      if (currentPhase === 'left_contact') {
-        grfLeft = bodyWeight * 2.5;
-        grfRight = bodyWeight * 0.2;
-      } else if (currentPhase === 'right_contact') {
-        grfRight = bodyWeight * 2.5;
-        grfLeft = bodyWeight * 0.2;
-      } else if (currentPhase === 'double_contact') {
-        grfLeft = bodyWeight * 1.4;
-        grfRight = bodyWeight * 1.4;
-      } else if (currentPhase === 'flight') {
-        grfLeft = 0;
-        grfRight = 0;
-      } else {
-        grfLeft = bodyWeight * 0.5;
-        grfRight = bodyWeight * 0.5;
+      f.active.tTO_ms = tTO;
+      f.active.inStance = false;
+      f.active.stanceTimeS = (tTO - f.active.tIC_ms) / 1000;
+
+      // basic per-step issues
+      if (f.active.kneeMinDeg !== 999 && f.active.kneeMinDeg > 165) {
+        addIssue('warning', `${side}: Insufficient knee flexion during stance`);
+        f.active.notes += 'Insufficient knee flexion; ';
+      }
+      if (f.active.hipDropMaxDeg > 8) {
+        addIssue('critical', `${side}: Excessive hip drop`);
+        f.active.notes += 'Excessive hip drop; ';
       }
 
-      return { left: grfLeft, right: grfRight };
+      // finalize this step now (stride/swing may be filled later at next IC)
+      finalizeStep(f.active);
+
+      // remember TO
+      f.lastTO = tTO;
+
+      // clear active
+      f.active = null;
+
+      setPhaseIndicator(3);
     }
 
-    function detectContactPhase(kpMap) {
-      const hip = kpMap[11] || kpMap[12];
-      const leftFoot = kpMap[15];
-      const rightFoot = kpMap[16];
+    function finalizeStep(step) {
+      step.idx = gait.steps.length + 1;
 
-      const result = { phase: currentPhase, contactTime: 0, stanceFlightRatio: 0 };
+      if (step.kneeMinDeg === 999) step.kneeMinDeg = null;
 
-      if (!hip || !leftFoot || !rightFoot) return result;
+      gait.steps.push({
+        idx: step.idx,
+        side: step.side,
+        tIC_ms: step.tIC_ms,
+        tTO_ms: step.tTO_ms,
+        stanceTimeS: step.stanceTimeS,
+        swingTimeS: step.swingTimeS,
+        strideCm: step.strideCm,
+        kneeMinDeg: step.kneeMinDeg,
+        hipDropMaxDeg: step.hipDropMaxDeg,
+        notes: (step.notes || '').trim()
+      });
 
-      const hipY = hip.y;
-      const leftFootY = leftFoot.y;
-      const rightFootY = rightFoot.y;
+      if (gait.steps.length % 2 === 0) updateChartsFromSteps();
+    }
 
-      const threshold = 0.2 * canvas.height;
-      const leftContact = leftFootY > hipY + threshold;
-      const rightContact = rightFootY > hipY + threshold;
-
-      if (leftContact && !rightContact) {
-        currentPhase = 'left_contact';
-        document.getElementById('gaitPhase').textContent = 'Left Contact';
-        updatePhaseIndicator(1);
-      } else if (rightContact && !leftContact) {
-        currentPhase = 'right_contact';
-        document.getElementById('gaitPhase').textContent = 'Right Contact';
-        updatePhaseIndicator(3);
-      } else if (leftContact && rightContact) {
-        currentPhase = 'double_contact';
-        document.getElementById('gaitPhase').textContent = 'Double Contact';
-        updatePhaseIndicator(2);
-      } else {
-        currentPhase = 'flight';
-        document.getElementById('gaitPhase').textContent = 'Flight';
-        updatePhaseIndicator(4);
+    function findLastStepOfSide(side) {
+      for (let i = gait.steps.length - 1; i >= 0; i--) {
+        if (gait.steps[i].side === side) return gait.steps[i];
       }
-
-      const now = performance.now();
-      if (!lastPhaseChangeTime) lastPhaseChangeTime = now;
-
-      if (currentPhase !== lastPhase) {
-        const duration = now - lastPhaseChangeTime;
-        if (lastPhase === 'left_contact' || lastPhase === 'right_contact' || lastPhase === 'double_contact') {
-          contactDurations.push(duration);
-          if (contactDurations.length > 50) contactDurations.shift();
-          result.contactTime = duration;
-        }
-        lastPhase = currentPhase;
-        lastPhaseChangeTime = now;
-      }
-
-      if (contactDurations.length > 1) {
-        const avgContact = contactDurations.reduce((a,b) => a + b, 0) / contactDurations.length;
-        const cad = computeCadence(Date.now()) || 180;
-        const estStepTime = 60000 / cad;
-        const estFlight = Math.max(0, estStepTime - avgContact);
-        result.stanceFlightRatio = estFlight / (avgContact || 1);
-      }
-
-      return result;
+      return null;
     }
 
-    function computeCadence(now) {
-      if (now - lastStepTime > 300 && now - lastStepTime < 2000) {
-        stepHistory.push(now);
-        if (stepHistory.length > 10) stepHistory.shift();
-      }
-      lastStepTime = now;
+    // ============================================================
+    // UI helpers
+    // ============================================================
+    function updatePhaseUI(L_contact, R_contact) {
+      let label = 'Standing';
+      let dot = 1;
 
-      if (stepHistory.length >= 2) {
-        const avgStepTime = (stepHistory[stepHistory.length - 1] - stepHistory[0]) / (stepHistory.length - 1);
-        return Math.round(60000 / avgStepTime);
-      }
-      return 0;
+      if (L_contact && R_contact) { label = 'Double Support'; dot = 2; }
+      else if (L_contact && !R_contact) { label = 'Right Swing'; dot = 4; }
+      else if (!L_contact && R_contact) { label = 'Left Swing'; dot = 4; }
+      else if (!L_contact && !R_contact) { label = 'Flight / Both Swing'; dot = 4; }
+
+      document.getElementById('gaitPhase').textContent = label;
+      setPhaseIndicator(dot);
     }
 
-    function calculateStrideLength(kpMap) {
-      const leftFoot = kpMap[15];
-      const rightFoot = kpMap[16];
-      const heightCm = parseFloat(document.getElementById('subjectHeight').value) || 170;
-
-      if (!leftFoot || !rightFoot || leftFoot.score < 0.5 || rightFoot.score < 0.5) return 0;
-
-      const pixelToMeter = (heightCm / 100) / Math.max(canvas.width, canvas.height);
-      const footSeparation = Math.abs(leftFoot.x - rightFoot.x) * pixelToMeter;
-      if (footSeparation <= 0) return 0;
-
-      return footSeparation * 100;
-    }
-
-    function calculateVerticalOscillation(kpMap) {
-      const nose = kpMap[0];
-      const midHipLeft = kpMap[11];
-      const midHipRight = kpMap[12];
-
-      if (!nose || !midHipLeft || !midHipRight) return 0;
-
-      const comY = (nose.y + midHipLeft.y + midHipRight.y) / 3;
-      comHeights.push(comY);
-      if (comHeights.length > 60) comHeights.shift();
-
-      if (comHeights.length < 10) return 0;
-
-      const minCOM = Math.min(...comHeights);
-      const maxCOM = Math.max(...comHeights);
-      const verticalOscPixels = maxCOM - minCOM;
-
-      const heightCm = parseFloat(document.getElementById('subjectHeight').value) || 170;
-      const pixelToMeter = (heightCm / 100) / canvas.height;
-      const oscillationCm = verticalOscPixels * pixelToMeter * 100;
-      return oscillationCm;
-    }
-
-    function detectFootStrike(kpMap) {
-      const leftHeel = kpMap[15];
-      const rightHeel = kpMap[16];
-      const leftKnee = kpMap[13];
-      const rightKnee = kpMap[14];
-
-      if (leftHeel && leftKnee && leftHeel.score > 0.5 && leftKnee.score > 0.5) {
-        const heelToKneeX = leftHeel.x - leftKnee.x;
-        if (heelToKneeX < -30) return 'heel_strike';
-        if (Math.abs(heelToKneeX) < 30) return 'midfoot_strike';
-        return 'forefoot_strike';
-      }
-
-      if (rightHeel && rightKnee && rightHeel.score > 0.5 && rightKnee.score > 0.5) {
-        const heelToKneeX = rightHeel.x - rightKnee.x;
-        if (heelToKneeX < -30) return 'heel_strike';
-        if (Math.abs(heelToKneeX) < 30) return 'midfoot_strike';
-        return 'forefoot_strike';
-      }
-
-      return 'unknown';
-    }
-
-    // Frontal-plane helpers
-    function calculateFrontalPelvicDrop(kpMap) {
-      const leftHip = kpMap[11];
-      const rightHip = kpMap[12];
-      if (!leftHip || !rightHip || leftHip.score < 0.5 || rightHip.score < 0.5) return 0;
-
-      const dx = rightHip.x - leftHip.x;
-      const dy = rightHip.y - leftHip.y;
-      const angleDeg = Math.atan2(dy, dx || 1) * 180 / Math.PI;
-      return angleDeg;
-    }
-
-    function calculateFPPA(knee, hip, ankle) {
-      if (!knee || !hip || !ankle ||
-          knee.score < 0.5 || hip.score < 0.5 || ankle.score < 0.5) return 0;
-
-      const v1x = knee.x - hip.x;
-      const v1y = knee.y - hip.y;
-      const v2x = knee.x - ankle.x;
-      const v2y = knee.y - ankle.y;
-
-      const dot = v1x * v2x + v1y * v2y;
-      const mag1 = Math.sqrt(v1x*v1x + v1y*v1y) || 1;
-      const mag2 = Math.sqrt(v2x*v2x + v2y*v2y) || 1;
-      let angle = Math.acos(Math.max(-1, Math.min(1, dot / (mag1 * mag2)))) * 180 / Math.PI;
-
-      const midX = (hip.x + ankle.x) / 2;
-      const medial = knee.x < midX;
-      if (medial) angle = +angle;
-      else angle = -angle;
-      return angle;
-    }
-
-    function calculateStepWidth(kpMap) {
-      const leftFoot = kpMap[15];
-      const rightFoot = kpMap[16];
-      const heightCm = parseFloat(document.getElementById('subjectHeight').value) || 170;
-
-      if (!leftFoot || !rightFoot || leftFoot.score < 0.5 || rightFoot.score < 0.5) return 0;
-
-      const pixelDistance = Math.abs(leftFoot.x - rightFoot.x);
-      const pixelToMeter = (heightCm / 100) / Math.max(canvas.width, canvas.height);
-      return pixelDistance * pixelToMeter * 100;
-    }
-
-    function updatePhaseIndicator(phase) {
+    function setPhaseIndicator(phase) {
       for (let i = 1; i <= 4; i++) {
         const dot = document.getElementById('phase' + i);
         if (dot) dot.classList.toggle('active', i === phase);
       }
     }
 
+    function updateCadenceUI() {
+      const t = gait.icTimes;
+      if (t.length < 4) return;
+
+      const lastN = 8;
+      const slice = t.slice(-lastN);
+
+      const deltas = [];
+      for (let i = 1; i < slice.length; i++) deltas.push((slice[i] - slice[i-1]) / 1000);
+      const avg = deltas.reduce((a,b)=>a+b,0) / deltas.length;
+      const cadence = avg > 0 ? Math.round(60 / avg) : 0;
+
+      document.getElementById('cadence').innerHTML = `${cadence}<span class="metric-unit">steps/min</span>`;
+      if (cadence > 0 && cadence < 160) addIssue('warning', 'Low cadence - consider increasing step rate');
+    }
+
+    function updateRollingUI() {
+      const steps = gait.steps;
+      if (!steps.length) return;
+
+      const n = gait.recentWindow;
+      const slice = steps.slice(-n);
+
+      const nums = (k) => slice.map(s => s[k]).filter(v => typeof v === 'number' && isFinite(v));
+      const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+
+      const stanceAvg = mean(nums('stanceTimeS'));
+      const swingAvg = mean(nums('swingTimeS'));
+      const strideAvg = mean(nums('strideCm'));
+
+      document.getElementById('stanceTime').innerHTML = `${stanceAvg.toFixed(2)}<span class="metric-unit">s</span>`;
+      document.getElementById('swingTime').innerHTML = `${swingAvg.toFixed(2)}<span class="metric-unit">s</span>`;
+      document.getElementById('strideLength').innerHTML = `${strideAvg.toFixed(0)}<span class="metric-unit">cm</span>`;
+
+      const last = steps[steps.length - 1];
+      document.getElementById('hipDrop').innerHTML = `${(last.hipDropMaxDeg ?? 0).toFixed(1)}<span class="metric-unit">°</span>`;
+
+      if (last.side === 'L') document.getElementById('kneeMinL').innerHTML = `${(last.kneeMinDeg ?? 0).toFixed(0)}<span class="metric-unit">°</span>`;
+      if (last.side === 'R') document.getElementById('kneeMinR').innerHTML = `${(last.kneeMinDeg ?? 0).toFixed(0)}<span class="metric-unit">°</span>`;
+    }
+
+    // ============================================================
+    // Geometry / metrics
+    // ============================================================
+    function estimatePxToCm(nose, ankleL, ankleR, heightCm) {
+      if (!heightCm || !nose || (!ankleL && !ankleR)) return null;
+      const lowestAnkleY = Math.max(ankleL ? ankleL.y : 0, ankleR ? ankleR.y : 0);
+      const bodyPx = Math.abs(lowestAnkleY - nose.y);
+      if (bodyPx < 50) return null;
+      return heightCm / bodyPx; // cm per pixel
+    }
+
+    function midX(a, b) {
+      if (a && b) return (a.x + b.x) / 2;
+      if (a) return a.x;
+      if (b) return b.x;
+      return null;
+    }
+
+    function computeHipDropDeg(hipL, hipR) {
+      if (!hipL || !hipR) return 0;
+      const dy = Math.abs(hipL.y - hipR.y);
+      const dx = Math.abs(hipL.x - hipR.x) || 1;
+      return Math.atan2(dy, dx) * 180 / Math.PI;
+    }
+
+    function computeOverstrideRisk(hipMidX, ankle, bodyHeightPx) {
+      if (hipMidX == null || !ankle) return { level: 'Low', ratio: 0 };
+      const denom = Math.max(1, bodyHeightPx || 1);
+      const ratio = Math.abs(ankle.x - hipMidX) / denom;
+
+      let level = 'Low';
+      if (ratio > 0.30) level = 'High';
+      else if (ratio > 0.20) level = 'Moderate';
+
+      return { level, ratio };
+    }
+
+    // Frontal “knee medial drift” proxy:
+    // For each leg, compute angle between hip->knee vector and knee->ankle vector projected in x-axis direction.
+    // Larger inward kink => larger proxy angle. This is *not* true valgus angle, but useful for screening.
+    function computeKneeMedialDriftProxyDeg(hipL, kneeL, ankleL, hipR, kneeR, ankleR) {
+      const ang = (hip, knee, ankle) => {
+        if (!hip || !knee || !ankle) return null;
+        // Use a 2D angle at knee, but emphasize x deviation by weighting x more
+        const ax = (hip.x - knee.x) * 1.5, ay = (hip.y - knee.y);
+        const bx = (ankle.x - knee.x) * 1.5, by = (ankle.y - knee.y);
+        const dot = ax*bx + ay*by;
+        const na = Math.hypot(ax, ay) || 1;
+        const nb = Math.hypot(bx, by) || 1;
+        const cos = Math.max(-1, Math.min(1, dot/(na*nb)));
+        return Math.acos(cos) * 180 / Math.PI; // ~straight is ~180
+      };
+
+      const aL = ang(hipL, kneeL, ankleL);
+      const aR = ang(hipR, kneeR, ankleR);
+
+      // Convert to "drift" = 180 - angle (bigger = more bend)
+      const driftL = (aL != null) ? Math.max(0, 180 - aL) : null;
+      const driftR = (aR != null) ? Math.max(0, 180 - aR) : null;
+
+      // Show max drift as a single scalar
+      const vals = [driftL, driftR].filter(v => typeof v === 'number');
+      const max = vals.length ? Math.max(...vals) : 0;
+
+      // Simple warnings (tunable)
+      if (max > 18) addIssue('critical', 'Frontal: High knee medial drift (valgus proxy)');
+      else if (max > 12) addIssue('warning', 'Frontal: Moderate knee medial drift (valgus proxy)');
+
+      return max;
+    }
+
     function calculateAngle(a, b, c) {
-      const radians = Math.atan2(c.y - b.y, c.x - b.x) -
-                      Math.atan2(a.y - b.y, a.x - b.x);
+      const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
       let angle = Math.abs(radians * 180 / Math.PI);
       if (angle > 180) angle = 360 - angle;
       return angle;
     }
 
+    // ============================================================
+    // Issues
+    // ============================================================
     function addIssue(severity, message) {
-      const key = severity + ':' + message;
+      const key = `${severity}:${message}`;
       if (detectedIssues.has(key)) return;
 
       detectedIssues.add(key);
@@ -1358,140 +1123,182 @@
 
       if (detectedIssues.size === 1) issuesList.innerHTML = '';
 
-      const issueDiv = document.createElement('div');
-      issueDiv.className = 'issue-item ' + severity;
-      issueDiv.textContent = message;
-      issuesList.insertBefore(issueDiv, issuesList.firstChild);
+      const div = document.createElement('div');
+      div.className = 'issue-item ' + severity;
+      div.textContent = message;
+      issuesList.insertBefore(div, issuesList.firstChild);
 
-      while (issuesList.children.length > 5) {
-        issuesList.removeChild(issuesList.lastChild);
-      }
+      while (issuesList.children.length > 6) issuesList.removeChild(issuesList.lastChild);
 
-      setTimeout(() => detectedIssues.delete(key), 5000);
+      setTimeout(() => detectedIssues.delete(key), 6500);
     }
 
+    // ============================================================
+    // Recording
+    // ============================================================
     function toggleRecording() {
       isRecording = !isRecording;
       recordBtn.classList.toggle('recording');
 
       if (isRecording) {
-        sessionStartTime = performance.now();
-        recordedData = [];
-        chartData = {
-          timestamps: [],
-          kneeFlexionLeft: [],
-          kneeFlexionRight: [],
-          cadence: [],
-          hipDrop: [],
-          verticalOsc: [],
-          contactTime: [],
-          pelvicDropFrontal: [],
-          kneeFpaaLeft: [],
-          kneeFpaaRight: []
-        };
-        stepHistory = [];
-        contactDurations = [];
-        comHeights = [];
-        lastPhase = currentPhase;
-        lastPhaseChangeTime = performance.now();
-
+        resetGaitAll();
         recordBtn.textContent = 'Stop Recording';
         exportBtn.disabled = true;
-
         statusDiv.className = 'status ready';
-        statusDiv.innerHTML = '🔴 Recording in Progress...';
+        statusDiv.innerHTML = '🔴 Recording (concurrent L/R steps)…';
       } else {
         recordBtn.textContent = 'Start Recording';
-        exportBtn.disabled = recordedData.length === 0;
-
+        exportBtn.disabled = gait.steps.length === 0;
         statusDiv.className = 'status ready';
-        statusDiv.innerHTML = '✓ Recording Stopped - ' + recordedData.length + ' data points captured';
+        statusDiv.innerHTML = `✓ Recording Stopped - ${gait.steps.length} steps captured`;
+        updateChartsFromSteps();
       }
     }
 
-    function exportToCSV() {
-      if (recordedData.length === 0) {
-        alert('No data to export. Please record a session first.');
+    // ============================================================
+    // Snapshot PNG (video + overlay)
+    // ============================================================
+    async function exportSnapshotPNG() {
+      if (!webcam || !canvas) { alert('Camera is not running.'); return; }
+
+      const w = canvas.width || webcam.videoWidth;
+      const h = canvas.height || webcam.videoHeight;
+      if (!w || !h) { alert('Snapshot unavailable (video not ready).'); return; }
+
+      const out = document.createElement('canvas');
+      out.width = w; out.height = h;
+      const octx = out.getContext('2d');
+
+      octx.drawImage(webcam, 0, 0, w, h);
+      octx.drawImage(canvas, 0, 0, w, h);
+
+      const filename = `gait_snapshot_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.png`;
+
+      out.toBlob(async (blob) => {
+        if (!blob) { alert('Failed to create snapshot.'); return; }
+        statusDiv.className = 'status ready';
+        statusDiv.innerHTML = 'Saving snapshot…';
+        await saveFile(blob, filename, 'image/png');
+        statusDiv.className = 'status ready';
+        statusDiv.innerHTML = '✓ Snapshot exported (iPhone: Share → Save to Files)';
+      }, 'image/png');
+    }
+
+    // ============================================================
+    // XLSX export (steps only)
+    // ============================================================
+    async function exportToXLSX() {
+      if (gait.steps.length === 0) {
+        alert('No steps to export. Record a session first.');
         return;
       }
 
-      let csv = 'Gait Biodynamics Lab - Treadmill Running Report\n';
-      csv += 'Subject: ' + subjectData.sex + ', Age: ' + subjectData.age +
-             ' years, Mass: ' + subjectData.mass + ' kg, Height: ' + subjectData.height + ' cm\n';
-      csv += 'Date: ' + new Date().toLocaleString() + '\n\n';
+      const filename = `gait_steps_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.xlsx`;
+      const wb = XLSX.utils.book_new();
 
-      csv += 'Timestamp (s),Knee Flexion Left (°),Knee Flexion Right (°),Hip Drop Sagittal (°),Cadence (steps/min),GRF Left (N),GRF Right (N),Stride Length (cm),Vertical Oscillation (cm),Contact Time (ms),Stance/Flight Ratio,Foot Strike,Overstride Risk,Gait Phase,Pelvic Drop Frontal (°),Knee FPPA Left (°),Knee FPPA Right (°),Step Width (cm),Issues\n';
+      // Subject sheet
+      const subjectSheetData = [
+        ['Gait Biodynamics Lab - Per-Step Report'],
+        ['Date', new Date().toLocaleString()],
+        ['View Mode', viewMode()],
+        ['Sex', subjectData.sex],
+        ['Age (years)', subjectData.age],
+        ['Mass (kg)', subjectData.mass],
+        ['Height (cm)', subjectData.height],
+        ['Notes', 'Concurrent L/R step tracking. Stance finalized at TO; swing/stride updated at next IC of same foot.']
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(subjectSheetData), 'Subject');
 
-      recordedData.forEach(row => {
-        csv += [
-          row.timestamp,
-          row.kneeFlexionLeft,
-          row.kneeFlexionRight,
-          row.hipDrop,
-          row.cadence,
-          row.grfLeft.toFixed(1),
-          row.grfRight.toFixed(1),
-          (row.strideLength || 0).toFixed ? row.strideLength.toFixed(1) : (row.strideLength || 0),
-          row.verticalOsc.toFixed ? row.verticalOsc.toFixed(2) : row.verticalOsc,
-          row.contactTime.toFixed ? row.contactTime.toFixed(1) : row.contactTime,
-          row.stanceFlightRatio.toFixed ? row.stanceFlightRatio.toFixed(2) : row.stanceFlightRatio,
-          '"' + (row.footStrike || '') + '"',
-          '"' + row.overstride + '"',
-          '"' + row.gaitPhase + '"',
-          row.pelvicDropFrontal.toFixed ? row.pelvicDropFrontal.toFixed(2) : row.pelvicDropFrontal,
-          row.kneeFpaaLeft.toFixed ? row.kneeFpaaLeft.toFixed(2) : row.kneeFpaaLeft,
-          row.kneeFpaaRight.toFixed ? row.kneeFpaaRight.toFixed(2) : row.kneeFpaaRight,
-          row.stepWidth.toFixed ? row.stepWidth.toFixed(2) : row.stepWidth,
-          '"' + row.issues.join('; ') + '"'
-        ].join(',') + '\n';
-      });
+      // Steps sheet
+      const rows = gait.steps.map(s => ({
+        'Step #': s.idx,
+        'Side': s.side,
+        'IC Time (ms)': Math.round(s.tIC_ms),
+        'TO Time (ms)': (typeof s.tTO_ms === 'number') ? Math.round(s.tTO_ms) : '',
+        'Stance Time (s)': (typeof s.stanceTimeS === 'number') ? Number(s.stanceTimeS.toFixed(3)) : '',
+        'Swing Time (s)': (typeof s.swingTimeS === 'number') ? Number(s.swingTimeS.toFixed(3)) : '',
+        'Stride Length (cm)': (typeof s.strideCm === 'number') ? Number(s.strideCm.toFixed(1)) : '',
+        'Knee Min (°)': (typeof s.kneeMinDeg === 'number') ? Number(s.kneeMinDeg.toFixed(1)) : '',
+        'Hip Drop Max (°)': (typeof s.hipDropMaxDeg === 'number') ? Number(s.hipDropMaxDeg.toFixed(2)) : '',
+        'Notes': s.notes || ''
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Steps');
 
-      csv += '\nSummary Statistics\n';
-      csv += 'Metric,Average,Min,Max\n';
+      // Summary
+      const lastN = 12;
+      const slice = gait.steps.slice(-lastN);
+      const nums = (k) => slice.map(s => s[k]).filter(v => typeof v === 'number' && isFinite(v));
+      const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
 
-      function addSummaryRow(label, arrAccessor) {
-        const arr = recordedData.map(arrAccessor).filter(v => typeof v === 'number' && !isNaN(v));
-        if (!arr.length) return;
-        const avg = arr.reduce((s, v) => s + v, 0) / arr.length;
-        const min = Math.min(...arr);
-        const max = Math.max(...arr);
-        csv += label + ',' + avg.toFixed(2) + ',' + min.toFixed(2) + ',' + max.toFixed(2) + '\n';
+      const stance = nums('stanceTimeS');
+      const swing = nums('swingTimeS');
+      const stride = nums('strideCm');
+      const knee = nums('kneeMinDeg');
+      const hip = nums('hipDropMaxDeg');
+
+      const summaryData = [
+        ['Summary Window', `Last ${Math.min(lastN, gait.steps.length)} steps`],
+        [],
+        ['Metric','Average','Min','Max'],
+        ['Stance Time (s)', stance.length ? mean(stance).toFixed(3) : '', stance.length ? Math.min(...stance).toFixed(3) : '', stance.length ? Math.max(...stance).toFixed(3) : ''],
+        ['Swing Time (s)', swing.length ? mean(swing).toFixed(3) : '', swing.length ? Math.min(...swing).toFixed(3) : '', swing.length ? Math.max(...swing).toFixed(3) : ''],
+        ['Stride Length (cm)', stride.length ? mean(stride).toFixed(1) : '', stride.length ? Math.min(...stride).toFixed(1) : '', stride.length ? Math.max(...stride).toFixed(1) : ''],
+        ['Knee Min (°)', knee.length ? mean(knee).toFixed(1) : '', knee.length ? Math.min(...knee).toFixed(1) : '', knee.length ? Math.max(...knee).toFixed(1) : ''],
+        ['Hip Drop Max (°)', hip.length ? mean(hip).toFixed(2) : '', hip.length ? Math.min(...hip).toFixed(2) : '', hip.length ? Math.max(...hip).toFixed(2) : '']
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), 'Summary');
+
+      const arrayBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      statusDiv.className = 'status ready';
+      statusDiv.innerHTML = 'Preparing XLSX…';
+      await saveFile(blob, filename, blob.type);
+      statusDiv.className = 'status ready';
+      statusDiv.innerHTML = '✓ XLSX exported (iPhone: Share → Save to Files)';
+    }
+
+    // iOS-friendly save (Share sheet is the iOS-approved path)
+    async function saveFile(blob, filename, mime) {
+      const canShare = !!(navigator.canShare && navigator.share);
+
+      if (isIOS && canShare) {
+        try {
+          const file = new File([blob], filename, { type: mime });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: filename, text: 'Exported from Gait Biodynamics Lab' });
+            return true;
+          }
+        } catch (_) {}
       }
 
-      addSummaryRow('Knee Flexion Left (°)', d => d.kneeFlexionLeft);
-      addSummaryRow('Knee Flexion Right (°)', d => d.kneeFlexionRight);
-      addSummaryRow('Hip Drop Sagittal (°)', d => d.hipDrop);
-      addSummaryRow('Cadence (steps/min)', d => d.cadence);
-      addSummaryRow('Stride Length (cm)', d => d.strideLength || 0);
-      addSummaryRow('Vertical Oscillation (cm)', d => d.verticalOsc || 0);
-      addSummaryRow('Contact Time (ms)', d => d.contactTime || 0);
-      addSummaryRow('Stance/Flight Ratio', d => d.stanceFlightRatio || 0);
-      addSummaryRow('Pelvic Drop Frontal (°)', d => d.pelvicDropFrontal || 0);
-      addSummaryRow('Knee FPPA Left (°)', d => d.kneeFpaaLeft || 0);
-      addSummaryRow('Knee FPPA Right (°)', d => d.kneeFpaaRight || 0);
-      addSummaryRow('Step Width (cm)', d => d.stepWidth || 0);
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const timeStr = new Date().toISOString().replace(/[:.]/g, '-');
-      a.download = 'gait_running_report_' + timeStr + '.csv';
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
-
-      statusDiv.className = 'status ready';
-      statusDiv.innerHTML = '✓ CSV file exported successfully!';
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      return true;
     }
 
-    // =========================
-    // Event listeners
-    // =========================
-    window.addEventListener('load', init);
+    // ============================================================
+    // Events
+    // ============================================================
     startBtn.addEventListener('click', startCamera);
     stopBtn.addEventListener('click', stopCamera);
     recordBtn.addEventListener('click', toggleRecording);
-    exportBtn.addEventListener('click', exportToCSV);
+    exportBtn.addEventListener('click', exportToXLSX);
+    snapshotBtn.addEventListener('click', exportSnapshotPNG);
+
+    viewModeEl.addEventListener('change', () => {
+      syncModeUI();
+      // Don’t reset recording automatically; but if you want stricter separation, you can:
+      // if (isRecording) resetGaitAll();
+    });
+
+    window.addEventListener('load', init);
   </script>
 </body>
 </html>
