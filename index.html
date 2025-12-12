@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioDynamics Lab: Gait Analysis Edition</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* --- THEME & LAYOUT --- */
+        :root {
+            --bg-app: #020617;
+            --glass-panel: rgba(15, 23, 42, 0.9);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --primary: #3b82f6;
+            --accent: #10b981; 
+            --warning: #facc15;
+            --danger: #ef4444;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+        }
+
+        body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: var(--bg-app); color: var(--text-main); height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; }
+
+        /* VIDEO STAGE */
+        #stage {
+            height: 70vh;
+            width: 100%;
+            position: relative;
+            background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas { max-width: 100%; max-height: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        video { display: none; }
+
+        /* DASHBOARD (Charts) */
+        #dashboard {
+            height: 30vh;
+            width: 100%;
+            background: #0f172a;
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 15px;
+            overflow-x: auto; 
+        }
+        #dashboard::-webkit-scrollbar { height: 8px; }
+        #dashboard::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 4px; }
+        
+        /* CHART CARDS */
+        .chart-card {
+            min-width: 400px;
+            height: 90%;
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 10px;
+            position: relative;
+            display: flex; flex-direction: column;
+        }
+        .chart-container { flex: 1; position: relative; width: 100%; }
+        .chart-title { font-size: 0.8rem; color: var(--text-muted); text-align: center; font-weight: 600; margin-bottom: 5px; }
+
+        /* LOADING SPINNER */
+        #loader { position: fixed; inset: 0; background: var(--bg-app); z-index: 999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.1); border-top: 5px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* UI OVERLAYS */
+        .badge-container { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; pointer-events: none; }
+        .badge { padding: 5px 10px; background: var(--glass-panel); border-radius: 4px; font-size: 0.75rem; font-weight: 700; border-left: 3px solid var(--primary); color: white; }
+    </style>
+</head>
+<body>
+
+<div id="loader">
+    <div class="spinner"></div>
+    <div style="font-weight: 600; color: var(--text-muted); letter-spacing: 1px;">INITIALIZING GAIT ENGINE...</div>
+</div>
+
+<div class="badge-container">
+    <div class="badge" id="statusBadge" style="border-left-color: var(--accent);">SYSTEM READY</div>
+    <div class="badge" id="fpsBadge">FPS: 0</div>
+</div>
+
+<div id="stage">
+    <video id="video" width="640" height="480" playsinline></video>
+    <canvas id="output" width="640" height="480"></canvas>
+</div>
+
+<div id="dashboard">
+    <div style="color: var(--text-muted); margin: auto; font-size: 0.9rem;">
+        Charts will appear here automatically.
+    </div>
+</div>
+
+<script>
+/**
+ * BIODYNAMICS LAB - GAIT ANALYSIS ENGINE
+ * * Features:
+ * 1. MoveNet Lightning (High FPS Pose Estimation)
+ * 2. 1€ Filter (Jitter smoothing)
+ * 3. Gait Logic: Cadence, Vertical Oscillation, Shin Angle (Overstride)
+ */
+
+// --- CONFIGURATION ---
+const CONFIG = {
+    width: 640,
+    height: 480,
+    smoothing: 0.8 // Alpha for basic velocity smoothing
+};
+
+// --- 1€ FILTER (Signal Smoothing) ---
+// Essential for cleaning up noisy webcam data to get clean angles
+class OneEuroFilter {
+    constructor(freq, minCutoff=1.0, beta=0.0, dcutoff=1.0) {
+        this.freq=freq; this.minCutoff=minCutoff; this.beta=beta; this.dcutoff=dcutoff;
+        this.x=new LowPassFilter(this.alpha(minCutoff)); 
+        this.dx=new LowPassFilter(this.alpha(dcutoff)); 
+        this.lastTime=null;
+    }
+    alpha(cutoff) { const te=1.0/this.freq; const tau=1.0/(2*Math.PI*cutoff); return 1.0/(1.0+tau/te); }
+    filter(val, timestamp) {
+        if(this.lastTime && timestamp) this.freq=1.0/(timestamp-this.lastTime);
+        this.lastTime=timestamp;
+        const d=(this.x.lastVal!==null)?(val-this.x.lastVal)*this.freq:0.0;
+        const edx=this.dx.filterWithAlpha(d, this.alpha(this.dcutoff));
+        const cutoff=this.minCutoff+this.beta*Math.abs(edx);
+        return this.x.filterWithAlpha(val, this.alpha(cutoff));
+    }
+}
+class LowPassFilter {
+    constructor(alpha){this.alpha=alpha;this.lastVal=null;}
+    filterWithAlpha(val, alpha){
+        if(this.lastVal===null){this.lastVal=val;return val;}
+        const res=alpha*val+(1.0-alpha)*this.lastVal; this.lastVal=res; return res;
+    }
+}
+
+// --- GAIT ANALYZER LOGIC ---
+class GaitAnalyzer {
+    constructor() {
+        this.stepHistory = [];
+        this.lastStepTime = 0;
+        this.hipYHistory = [];
+        
+        // Track vertical velocity of ankles to detect ground contact
+        this.prevAnkleY = { left: 0, right: 0 };
+        this.velocities = { left: 0, right: 0 }; 
+
+        // Current real-time metrics
+        this.metrics = {
+            spm: 0,             // Cadence
+            oscillation: 0,     // Vertical Bounce (px)
+            shinAngle: 0,       // Angle at touchdown (Overstride)
+            stepCount: 0
+        };
+    }
+
+    update(pose, t) {
+        if(!pose['left_ankle'] || !pose['right_ankle'] || !pose['left_hip'] || !pose['right_hip']) return;
+
+        // 1. Vertical Oscillation (Bounce)
+        // We track the midpoint of the hips over the last 60 frames (~1-2 secs)
+        const midHipY = (pose['left_hip'].y + pose['right_hip'].y) / 2;
+        this.hipYHistory.push(midHipY);
+        if (this.hipYHistory.length > 60) this.hipYHistory.shift();
+        
+        const minY = Math.min(...this.hipYHistory);
+        const maxY = Math.max(...this.hipYHistory);
+        this.metrics.oscillation = Math.round(maxY - minY);
+
+        // 2. Step Detection & Shin Angle
+        this.processLeg('left', pose, t);
+        this.processLeg('right', pose, t);
+
+        // 3. Update Cadence (SPM) based on step history
+        this.calculateSPM();
+    }
+
+    processLeg(side, pose, t) {
+        const ankleY = pose[`${side}_ankle`].y;
+        
+        // Calculate vertical velocity of ankle
+        const v = ankleY - this.prevAnkleY[side];
+        
+        // DETECT IMPACT:
+        // If velocity was positive (moving down) and now essentially zero or negative (stopped/moving up)
+        // And the foot is low enough (y > 300 roughly implies lower half of screen)
+        if (this.velocities[side] > 0 && v <= 0 && ankleY > 250) {
+            this.registerStep(side, t, pose);
+        }
+
+        this.velocities[side] = v;
+        this.prevAnkleY[side] = ankleY;
+    }
+
+    registerStep(side, t, pose) {
+        // Debounce: Ignore if last step was < 200ms ago (impossible to run > 300 SPM)
+        if (t - this.lastStepTime < 0.20) return;
+
+        this.metrics.stepCount++;
+        this.stepHistory.push(t);
+        if (this.stepHistory.length > 10) this.stepHistory.shift(); // Keep last 10 steps
+        this.lastStepTime = t;
+
+        // CALCULATE SHIN ANGLE AT TOUCHDOWN (Overstride)
+        // Vector from Knee to Ankle
+        const k = pose[`${side}_knee`];
+        const a = pose[`${side}_ankle`];
+        
+        // Calculate angle relative to vertical
+        // 0 degrees = vertical shin. Positive = foot ahead of knee (Overstride).
+        // Using atan2(dx, dy) where dy is vertical distance
+        const dx = a.x - k.x;
+        const dy = a.y - k.y; 
+        
+        // We take absolute of dx because we don't know if runner is facing left or right
+        // Ideally, we want the angle of inclination
+        const rad = Math.atan2(Math.abs(dx), dy);
+        const deg = rad * (180 / Math.PI);
+        
+        this.metrics.shinAngle = Math.round(deg);
+    }
+
+    calculateSPM() {
+        if (this.stepHistory.length < 2) return;
+        
+        // Average time delta between steps
+        let totalDt = 0;
+        for(let i=1; i<this.stepHistory.length; i++){
+            totalDt += (this.stepHistory[i] - this.stepHistory[i-1]);
+        }
+        const avgDt = totalDt / (this.stepHistory.length - 1);
+        
+        // SPM = 60 / avgDt
+        if(avgDt > 0) this.metrics.spm = Math.round(60 / avgDt);
+    }
+}
+
+// --- APP STATE & GLOBALS ---
+const state = {
+    detector: null,
+    rafId: null,
+    startT: 0,
+    prevT: 0,
+    charts: {},
+    filters: {}, // OneEuroFilters for joints
+    gaitAnalyzer: new GaitAnalyzer()
+};
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('output');
+const ctx = canvas.getContext('2d');
+const loader = document.getElementById('loader');
+
+// --- INITIALIZATION ---
+async function init() {
+    // 1. Setup Camera
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: CONFIG.width, height: CONFIG.height, frameRate: { ideal: 60 } } 
+        });
+        video.srcObject = stream;
+        await new Promise(r => video.onloadedmetadata = r);
+        video.play();
+    } catch (e) {
+        alert("Camera Error: " + e.message);
+        return;
+    }
+
+    // 2. Load Model (TensorFlow.js MoveNet)
+    await tf.ready();
+    const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
+    state.detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
+
+    // 3. Init Filters
+    // We filter knees and hips for cleaner graph lines
+    ['left_knee', 'right_knee', 'left_hip', 'right_hip'].forEach(k => {
+        state.filters[k] = new OneEuroFilter(30, 1.0, 0.005, 1.0);
+    });
+
+    // 4. Init Charts
+    initChart('knee_flexion', 'Knee Flexion (Deg)', 'rgb(59, 130, 246)');
+
+    // 5. Start Loop
+    loader.style.display = 'none';
+    state.startT = performance.now();
+    loop();
+}
+
+// --- MAIN LOOP ---
+async function loop() {
+    const t = (performance.now() - state.startT) / 1000; // Time in seconds
+    const dt = t - state.prevT;
+    state.prevT = t;
+
+    // Update FPS badge
+    if (Math.random() > 0.9) document.getElementById('fpsBadge').innerText = `FPS: ${Math.round(1/dt)}`;
+
+    // Estimate Pose
+    const poses = await state.detector.estimatePoses(video);
+    
+    // Draw
+    ctx.clearRect(0, 0, CONFIG.width, CONFIG.height);
+    ctx.save();
+    ctx.scale(-1, 1); // Mirror video
+    ctx.translate(-CONFIG.width, 0);
+    ctx.drawImage(video, 0, 0, CONFIG.width, CONFIG.height);
+    
+    if (poses && poses.length > 0) {
+        const pose = normalizePose(poses[0].keypoints);
+        
+        // Run Logic
+        drawSkeleton(pose);
+        state.gaitAnalyzer.update(pose, t);
+        
+        // Calculate Knee Angle for chart
+        if(pose['right_hip'] && pose['right_knee'] && pose['right_ankle']) {
+            // Calculate raw angle
+            const rawAngle = calculateAngle(pose['right_hip'], pose['right_knee'], pose['right_ankle']);
+            
+            // Filter it
+            const smoothAngle = state.filters['right_knee'].filter(rawAngle, t);
+            
+            // Update Chart
+            updateChart('knee_flexion', smoothAngle);
+        }
+    }
+
+    ctx.restore();
+
+    // Draw UI Overlay (Not mirrored)
+    drawGaitDashboard();
+
+    requestAnimationFrame(loop);
+}
+
+// --- VISUALIZATION LOGIC ---
+
+function drawGaitDashboard() {
+    const m = state.gaitAnalyzer.metrics;
+    
+    // Config for the panel
+    const x = 20; const y = 80; const w = 200; const h = 160;
+
+    // Draw Glass Panel
+    ctx.save();
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    // Header
+    ctx.fillStyle = "#94a3b8"; 
+    ctx.font = "bold 12px Inter";
+    ctx.fillText("REAL-TIME GAIT METRICS", x + 15, y + 25);
+
+    // 1. Cadence (SPM)
+    ctx.fillStyle = "#f1f5f9"; ctx.font = "bold 32px Inter";
+    ctx.fillText(m.spm, x + 15, y + 65);
+    ctx.fillStyle = getMetricColor(m.spm, 170, 180); // Color code
+    ctx.font = "bold 12px Inter";
+    ctx.fillText("SPM", x + 80, y + 65);
+
+    // 2. Vertical Oscillation
+    ctx.fillStyle = "#f1f5f9"; ctx.font = "bold 20px Inter";
+    ctx.fillText(m.oscillation + " px", x + 15, y + 100);
+    ctx.fillStyle = "#94a3b8"; ctx.font = "11px Inter";
+    ctx.fillText("Vert. Oscillation", x + 80, y + 100);
+
+    // 3. Shin Angle (Overstride)
+    ctx.fillStyle = "#f1f5f9"; ctx.font = "bold 20px Inter";
+    ctx.fillText(m.shinAngle + "°", x + 15, y + 135);
+    // Logic: > 10 degrees is likely overstriding
+    ctx.fillStyle = m.shinAngle > 10 ? "#ef4444" : "#10b981"; 
+    ctx.font = "11px Inter";
+    ctx.fillText("Shin Angle (Impact)", x + 80, y + 135);
+
+    ctx.restore();
+}
+
+function drawSkeleton(pose) {
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
+    
+    // Simple Skeleton Connections
+    const connections = [
+        ['left_shoulder','right_shoulder'], ['left_shoulder','left_hip'], ['right_shoulder','right_hip'],
+        ['left_hip','left_knee'], ['left_knee','left_ankle'],
+        ['right_hip','right_knee'], ['right_knee','right_ankle']
+    ];
+
+    connections.forEach(([a, b]) => {
+        if(pose[a] && pose[b] && pose[a].score > 0.3 && pose[b].score > 0.3) {
+            ctx.beginPath();
+            ctx.moveTo(pose[a].x, pose[a].y);
+            ctx.lineTo(pose[b].x, pose[b].y);
+            ctx.stroke();
+        }
+    });
+
+    // Draw Joints
+    Object.values(pose).forEach(p => {
+        if(p.score > 0.3) {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 2*Math.PI); ctx.fill();
+        }
+    });
+}
+
+function normalizePose(keypoints) {
+    const d = {};
+    keypoints.forEach(p => {
+        d[p.name] = { x: p.x, y: p.y, score: p.score };
+    });
+    return d;
+}
+
+function calculateAngle(a, b, c) {
+    // Standard 3-point angle calculation
+    const AB = Math.sqrt(Math.pow(b.x - a.x, 2) + Math.pow(b.y - a.y, 2));    
+    const BC = Math.sqrt(Math.pow(b.x - c.x, 2) + Math.pow(b.y - c.y, 2)); 
+    const AC = Math.sqrt(Math.pow(c.x - a.x, 2) + Math.pow(c.y - a.y, 2));
+    return Math.acos((BC*BC+AB*AB-AC*AC)/(2*BC*AB)) * (180/Math.PI);
+}
+
+function getMetricColor(val, minGood, maxGood) {
+    if(val >= minGood && val <= maxGood) return "#10b981"; // Green
+    if(val < minGood) return "#facc15"; // Yellow (too low)
+    return "#3b82f6"; // Blue (high)
+}
+
+// --- CHARTING HELPERS ---
+function initChart(id, label, color) {
+    const wrapper = document.getElementById('dashboard');
+    // Clear default text
+    if(wrapper.innerText.includes('Charts will appear')) wrapper.innerHTML = '';
+
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.innerHTML = `<div class="chart-title">${label}</div><div class="chart-container"><canvas id="canvas_${id}"></canvas></div>`;
+    wrapper.appendChild(card);
+
+    const ctxChart = document.getElementById(`canvas_${id}`).getContext('2d');
+    
+    // Init data arrays (pre-filled to scroll)
+    const initialData = Array(50).fill(null);
+    const initialLabels = Array(50).fill('');
+
+    state.charts[id] = new Chart(ctxChart, {
+        type: 'line',
+        data: {
+            labels: initialLabels,
+            datasets: [{
+                data: initialData,
+                borderColor: color,
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.3, // Smooth curve
+                fill: true,
+                backgroundColor: color.replace(')', ', 0.1)').replace('rgb', 'rgba')
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: { grid: { color: '#334155' }, min: 0, max: 180 }
+            }
+        }
+    });
+}
+
+function updateChart(id, val) {
+    if(!state.charts[id]) return;
+    const chart = state.charts[id];
+    chart.data.datasets[0].data.push(val);
+    chart.data.datasets[0].data.shift();
+    chart.update('none'); // High perf update
+}
+
+// Start System
+window.onload = init;
+
+</script>
+</body>
+</html>
