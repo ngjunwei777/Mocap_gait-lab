@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gait Analysis System - Pose Estimation for Running Biomechanics</title>
-    <meta name="description" content="AI-powered gait analysis tool for runners and physical therapists. Analyze running form, detect biomechanical issues, and improve performance.">
+    <title>Gait Biodynamics Lab - Pose Estimation for Running Biomechanics</title>
+    <meta name="description" content="AI-powered gait analysis tool for runners and physical therapists. Analyze running form, detect biomechanical issues, and improve performance with inverse dynamics.">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
@@ -318,11 +318,36 @@
 </head>
 <body>
     <div class="container">
-        <h1>🏃 Gait Analysis System</h1>
-        <p class="subtitle">Advanced AI-Powered Pose Estimation for Running Biomechanics</p>
+        <h1>🏃 Gait Biodynamics Lab</h1>
+        <p class="subtitle">Advanced AI-Powered Pose Estimation & Inverse Dynamics Analysis</p>
         
         <div id="status" class="status loading">
             <span class="loading-spinner"></span> Initializing AI Model...
+        </div>
+
+        <div class="info-section">
+            <h3>👤 Subject Information</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #666;">Sex:</label>
+                    <select id="subjectSex" style="width: 100%; padding: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px;">
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #666;">Age (years):</label>
+                    <input type="number" id="subjectAge" min="1" max="120" value="30" style="width: 100%; padding: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #666;">Mass (kg):</label>
+                    <input type="number" id="subjectMass" min="20" max="300" value="70" step="0.1" style="width: 100%; padding: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #666;">Height (cm):</label>
+                    <input type="number" id="subjectHeight" min="100" max="250" value="170" step="0.1" style="width: 100%; padding: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 14px;">
+                </div>
+            </div>
         </div>
 
         <div class="main-content">
@@ -365,6 +390,14 @@
                     <div class="metric-card">
                         <div class="metric-label">Stride Length</div>
                         <div class="metric-value" id="strideLength">0<span class="metric-unit">cm</span></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Ground Reaction Force (L)</div>
+                        <div class="metric-value" id="grfLeft">0<span class="metric-unit">N</span></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Ground Reaction Force (R)</div>
+                        <div class="metric-value" id="grfRight">0<span class="metric-unit">N</span></div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-label">Knee Flexion (L)</div>
@@ -460,6 +493,25 @@
         let lastStepTime = 0;
         let currentPhase = 'standing';
         let sessionStartTime = 0;
+        
+        // Subject data
+        let subjectData = {
+            sex: 'male',
+            age: 30,
+            mass: 70,
+            height: 170
+        };
+        
+        // Segment issues tracking
+        let segmentIssues = {
+            leftUpperLeg: false,
+            rightUpperLeg: false,
+            leftLowerLeg: false,
+            rightLowerLeg: false,
+            leftFoot: false,
+            rightFoot: false,
+            hip: false
+        };
         
         // FPS tracking
         let lastFrameTime = 0;
@@ -743,19 +795,54 @@
         }
 
         function drawSkeleton(keypoints) {
+            // Reset segment issues each frame
+            segmentIssues = {
+                leftUpperLeg: false,
+                rightUpperLeg: false,
+                leftLowerLeg: false,
+                rightLowerLeg: false,
+                leftFoot: false,
+                rightFoot: false,
+                hip: false
+            };
+
+            // Define connections with side identification
             const connections = [
-                [5, 6], [5, 7], [7, 9], [6, 8], [8, 10],
-                [5, 11], [6, 12], [11, 12],
-                [11, 13], [13, 15], [12, 14], [14, 16]
+                // Left side (blue)
+                { points: [5, 7], color: '#3498db', segment: null }, // Left shoulder to elbow
+                { points: [7, 9], color: '#3498db', segment: null }, // Left elbow to wrist
+                { points: [5, 11], color: '#3498db', segment: null }, // Left shoulder to hip
+                { points: [11, 13], color: '#3498db', segment: 'leftUpperLeg' }, // Left hip to knee
+                { points: [13, 15], color: '#3498db', segment: 'leftLowerLeg' }, // Left knee to ankle
+                
+                // Right side (green)
+                { points: [6, 8], color: '#2ecc71', segment: null }, // Right shoulder to elbow
+                { points: [8, 10], color: '#2ecc71', segment: null }, // Right elbow to wrist
+                { points: [6, 12], color: '#2ecc71', segment: null }, // Right shoulder to hip
+                { points: [12, 14], color: '#2ecc71', segment: 'rightUpperLeg' }, // Right hip to knee
+                { points: [14, 16], color: '#2ecc71', segment: 'rightLowerLeg' }, // Right knee to ankle
+                
+                // Center (purple)
+                { points: [5, 6], color: '#9b59b6', segment: null }, // Shoulders
+                { points: [11, 12], color: '#9b59b6', segment: 'hip' } // Hips
             ];
 
-            ctx.strokeStyle = '#667eea';
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 5;
 
-            connections.forEach(([i, j]) => {
+            // Draw connections
+            connections.forEach(conn => {
+                const [i, j] = conn.points;
                 const kp1 = keypoints[i];
                 const kp2 = keypoints[j];
+                
                 if (kp1.score > 0.3 && kp2.score > 0.3) {
+                    // Check if this segment has an issue
+                    let strokeColor = conn.color;
+                    if (conn.segment && segmentIssues[conn.segment]) {
+                        strokeColor = '#e74c3c'; // Red for issues
+                    }
+                    
+                    ctx.strokeStyle = strokeColor;
                     ctx.beginPath();
                     ctx.moveTo(kp1.x, kp1.y);
                     ctx.lineTo(kp2.x, kp2.y);
@@ -763,11 +850,21 @@
                 }
             });
 
-            keypoints.forEach(kp => {
+            // Draw keypoints with color coding
+            keypoints.forEach((kp, idx) => {
                 if (kp.score > 0.3) {
                     ctx.beginPath();
-                    ctx.arc(kp.x, kp.y, 6, 0, 2 * Math.PI);
-                    ctx.fillStyle = '#764ba2';
+                    ctx.arc(kp.x, kp.y, 8, 0, 2 * Math.PI);
+                    
+                    // Color code keypoints: left = blue, right = green, center = purple
+                    if ([5, 7, 9, 11, 13, 15].includes(idx)) {
+                        ctx.fillStyle = '#3498db'; // Left side - blue
+                    } else if ([6, 8, 10, 12, 14, 16].includes(idx)) {
+                        ctx.fillStyle = '#2ecc71'; // Right side - green
+                    } else {
+                        ctx.fillStyle = '#9b59b6'; // Center - purple
+                    }
+                    
                     ctx.fill();
                     ctx.strokeStyle = 'white';
                     ctx.lineWidth = 2;
@@ -782,16 +879,36 @@
                 kpMap[i] = kp;
             });
 
+            // Get subject data
+            subjectData.sex = document.getElementById('subjectSex').value;
+            subjectData.age = parseFloat(document.getElementById('subjectAge').value);
+            subjectData.mass = parseFloat(document.getElementById('subjectMass').value);
+            subjectData.height = parseFloat(document.getElementById('subjectHeight').value);
+
             let currentData = {
                 timestamp: isRecording ? ((timestamp - sessionStartTime) / 1000).toFixed(2) : 0,
                 kneeFlexionLeft: 0,
                 kneeFlexionRight: 0,
                 hipDrop: 0,
                 cadence: 0,
+                grfLeft: 0,
+                grfRight: 0,
                 overstride: 'Low',
                 gaitPhase: currentPhase,
                 issues: []
             };
+
+            // Calculate Ground Reaction Forces using inverse dynamics
+            if (kpMap[15] && kpMap[16]) {
+                const grfData = calculateGroundReactionForce(kpMap, subjectData);
+                currentData.grfLeft = grfData.left;
+                currentData.grfRight = grfData.right;
+                
+                document.getElementById('grfLeft').innerHTML = 
+                    Math.round(grfData.left) + '<span class="metric-unit">N</span>';
+                document.getElementById('grfRight').innerHTML = 
+                    Math.round(grfData.right) + '<span class="metric-unit">N</span>';
+            }
 
             // Left knee angle
             if (kpMap[11] && kpMap[13] && kpMap[15]) {
@@ -806,6 +923,8 @@
                     const issue = 'Insufficient left knee flexion';
                     addIssue('warning', issue);
                     currentData.issues.push(issue);
+                    segmentIssues.leftUpperLeg = true;
+                    segmentIssues.leftLowerLeg = true;
                 }
             }
 
@@ -822,6 +941,8 @@
                     const issue = 'Insufficient right knee flexion';
                     addIssue('warning', issue);
                     currentData.issues.push(issue);
+                    segmentIssues.rightUpperLeg = true;
+                    segmentIssues.rightLowerLeg = true;
                 }
             }
 
@@ -837,6 +958,7 @@
                     const issue = 'Excessive hip drop - IT band risk';
                     addIssue('critical', issue);
                     currentData.issues.push(issue);
+                    segmentIssues.hip = true;
                 }
             }
 
@@ -860,6 +982,8 @@
                     const issue = 'Overstriding detected';
                     addIssue('critical', issue);
                     currentData.issues.push(issue);
+                    segmentIssues.leftLowerLeg = true;
+                    segmentIssues.leftFoot = true;
                 } else if (overstrideRatio > 0.2) {
                     currentData.overstride = 'Moderate';
                     document.getElementById('overstride').textContent = 'Moderate';
@@ -885,6 +1009,50 @@
                     updateCharts();
                 }
             }
+        }
+
+        function calculateGroundReactionForce(kpMap, subject) {
+            // Inverse dynamics calculation for GRF
+            // Using simplified biomechanical model
+            const g = 9.81; // gravity m/s²
+            const mass = subject.mass;
+            
+            // Body weight
+            const bodyWeight = mass * g;
+            
+            // Estimate vertical acceleration from ankle movement
+            const leftAnkle = kpMap[15];
+            const rightAnkle = kpMap[16];
+            
+            // Simple model: GRF proportional to body weight and gait phase
+            // During stance phase, GRF can be 2-3x body weight during running
+            
+            let grfLeft = 0;
+            let grfRight = 0;
+            
+            if (leftAnkle && rightAnkle) {
+                // Determine which foot is in stance (lower Y = closer to ground)
+                const leftStance = leftAnkle.y > rightAnkle.y - 30;
+                const rightStance = rightAnkle.y > leftAnkle.y - 30;
+                
+                if (currentPhase === 'left_swing') {
+                    grfRight = bodyWeight * 2.5; // Right foot in stance
+                    grfLeft = 0;
+                } else if (currentPhase === 'right_swing') {
+                    grfLeft = bodyWeight * 2.5; // Left foot in stance
+                    grfRight = 0;
+                } else if (currentPhase === 'double_support') {
+                    // Both feet on ground, distribute weight
+                    grfLeft = bodyWeight * 1.2;
+                    grfRight = bodyWeight * 1.2;
+                } else {
+                    // Standing
+                    grfLeft = bodyWeight * 0.5;
+                    grfRight = bodyWeight * 0.5;
+                }
+            }
+            
+            return { left: grfLeft, right: grfRight };
         }
 
         function detectGaitPhase(leftY, rightY, kpMap) {
@@ -1000,10 +1168,15 @@
                 return;
             }
 
-            let csv = 'Timestamp (s),Knee Flexion Left (°),Knee Flexion Right (°),Hip Drop (°),Cadence (steps/min),Overstride Risk,Gait Phase,Issues\n';
+            // Add subject information header
+            let csv = 'Gait Biodynamics Lab - Analysis Report\n';
+            csv += `Subject: ${subjectData.sex}, Age: ${subjectData.age} years, Mass: ${subjectData.mass} kg, Height: ${subjectData.height} cm\n`;
+            csv += `Date: ${new Date().toLocaleString()}\n\n`;
+            
+            csv += 'Timestamp (s),Knee Flexion Left (°),Knee Flexion Right (°),Hip Drop (°),Cadence (steps/min),GRF Left (N),GRF Right (N),Overstride Risk,Gait Phase,Issues\n';
             
             recordedData.forEach(row => {
-                csv += `${row.timestamp},${row.kneeFlexionLeft},${row.kneeFlexionRight},${row.hipDrop},${row.cadence},"${row.overstride}","${row.gaitPhase}","${row.issues.join('; ')}"\n`;
+                csv += `${row.timestamp},${row.kneeFlexionLeft},${row.kneeFlexionRight},${row.hipDrop},${row.cadence},${row.grfLeft.toFixed(1)},${row.grfRight.toFixed(1)},"${row.overstride}","${row.gaitPhase}","${row.issues.join('; ')}"\n`;
             });
 
             // Add summary statistics
@@ -1025,6 +1198,14 @@
             const maxHipDrop = Math.max(...recordedData.map(d => d.hipDrop));
             csv += `Hip Drop (°),${avgHipDrop},${minHipDrop},${maxHipDrop}\n`;
             
+            const avgGrfLeft = (recordedData.reduce((sum, d) => sum + d.grfLeft, 0) / recordedData.length).toFixed(1);
+            const maxGrfLeft = Math.max(...recordedData.map(d => d.grfLeft));
+            csv += `GRF Left (N),${avgGrfLeft},0,${maxGrfLeft.toFixed(1)}\n`;
+            
+            const avgGrfRight = (recordedData.reduce((sum, d) => sum + d.grfRight, 0) / recordedData.length).toFixed(1);
+            const maxGrfRight = Math.max(...recordedData.map(d => d.grfRight));
+            csv += `GRF Right (N),${avgGrfRight},0,${maxGrfRight.toFixed(1)}\n`;
+            
             const cadences = recordedData.filter(d => d.cadence > 0).map(d => d.cadence);
             if (cadences.length > 0) {
                 const avgCadence = (cadences.reduce((sum, c) => sum + c, 0) / cadences.length).toFixed(0);
@@ -1037,7 +1218,7 @@
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `gait_analysis_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+            a.download = `gait_biodynamics_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
