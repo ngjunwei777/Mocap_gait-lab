@@ -113,7 +113,11 @@
       padding: 20px;
       height: fit-content;
     }
-    .metrics { display: grid; gap: 15px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .metrics {
+      display: grid;
+      gap: 15px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
     .metric-card {
       background: white;
       padding: 15px;
@@ -216,7 +220,7 @@
 <body>
   <div class="container">
     <h1>Jun Wei's Gait Lab</h1>
-    <p class="subtitle">Treadmill Running Gait Analysis with MoveNet & TensorFlow.js</p>
+    <p class="subtitle">Treadmill Running Gait Analysis (Sagittal + Frontal)</p>
 
     <div id="status" class="status loading">
       <span class="loading-spinner"></span> Initializing AI Model...
@@ -307,7 +311,7 @@
             <div class="metric-value" id="kneeAngleRight">0<span class="metric-unit">°</span></div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">Hip Drop</div>
+            <div class="metric-label">Hip Drop (Sagittal)</div>
             <div class="metric-value" id="hipDrop">0<span class="metric-unit">°</span></div>
           </div>
           <div class="metric-card">
@@ -330,6 +334,23 @@
             <div class="metric-label">Ground Contact Time</div>
             <div class="metric-value" id="contactTime">0<span class="metric-unit">ms</span></div>
           </div>
+          <!-- New frontal-plane metrics -->
+          <div class="metric-card">
+            <div class="metric-label">Pelvic Drop (Frontal)</div>
+            <div class="metric-value" id="pelvicDropFrontal">0<span class="metric-unit">°</span></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Knee FPPA (L)</div>
+            <div class="metric-value" id="kneeFpaaLeft">0<span class="metric-unit">°</span></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Knee FPPA (R)</div>
+            <div class="metric-value" id="kneeFpaaRight">0<span class="metric-unit">°</span></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Step Width</div>
+            <div class="metric-value" id="stepWidth">0<span class="metric-unit">cm</span></div>
+          </div>
         </div>
 
         <div style="margin-top: 20px;">
@@ -349,36 +370,25 @@
       <div class="chart-container"><canvas id="hipDropChart"></canvas></div>
       <div class="chart-container"><canvas id="vertOscChart"></canvas></div>
       <div class="chart-container"><canvas id="contactChart"></canvas></div>
+      <div class="chart-container"><canvas id="frontalChart"></canvas></div>
     </div>
 
     <div class="info-section">
       <h3>📋 How to Use (Treadmill)</h3>
       <ul>
         <li>Click <strong>"Start Camera"</strong> and allow camera permission (rear camera on mobile recommended).</li>
-        <li>Position the camera for a side view of the treadmill, with full body visible and 6–10 feet distance.</li>
-        <li>Warm up and then run at a steady pace for at least 20–30 seconds.</li>
+        <li>For sagittal analysis, place the camera side-on; for frontal analysis, face the treadmill frontally with full body visible.</li>
+        <li>Run at a steady pace for at least 20–30 seconds to stabilize metrics.</li>
         <li>Click <strong>"Start Recording"</strong> to log gait metrics; stop when enough data are collected.</li>
         <li>Click <strong>"Export CSV"</strong> to download full time-series and summary statistics.</li>
       </ul>
     </div>
 
-    <div class="info-section">
-      <h3>🎯 Interpretation Guide</h3>
-      <ul>
-        <li><strong>Cadence:</strong> 160–180 steps/min typical for distance running at moderate speeds.[web:9][web:18]</li>
-        <li><strong>Stride Length:</strong> Increases with speed; unusually long stride for cadence suggests overstriding.[web:9][web:15]</li>
-        <li><strong>Vertical Oscillation:</strong> Lower oscillation (often &lt; 5 cm) is associated with better running economy.[web:18]</li>
-        <li><strong>Hip Drop:</strong> Values &gt; 8° during stance can indicate weak hip abductors and higher injury risk.[web:9]</li>
-        <li><strong>Foot Strike:</strong> Heavy heel strike with long contact time can increase braking forces.[web:12][web:18]</li>
-        <li><strong>Stance/Flight Ratio:</strong> Running shows relatively short contact and longer swing/flight, especially at higher speeds.[web:9][web:15]</li>
-      </ul>
-    </div>
-
     <div class="github-footer">
       <p>🚀 <strong>Gait Analysis System</strong> - Educational Research Tool</p>
-      <p style="margin-top: 10px;">Built with TensorFlow.js MoveNet and Chart.js.[web:4][web:6][web:16]</p>
+      <p style="margin-top: 10px;">Built with TensorFlow.js MoveNet and Chart.js.[web:4][web:16]</p>
       <p style="margin-top: 10px; font-size: 14px; color: #666;">
-        For educational and research purposes only. Not a medical device.
+        For educational and research purposes only. Not a medical device.[web:32]
       </p>
     </div>
   </div>
@@ -418,7 +428,6 @@
     };
 
     // FPS
-    let lastFrameTime = 0;
     let fps = 0;
     let frameCount = 0;
     let fpsUpdateTime = 0;
@@ -431,7 +440,10 @@
       cadence: [],
       hipDrop: [],
       verticalOsc: [],
-      contactTime: []
+      contactTime: [],
+      pelvicDropFrontal: [],
+      kneeFpaaLeft: [],
+      kneeFpaaRight: []
     };
 
     const startBtn = document.getElementById('startBtn');
@@ -440,7 +452,7 @@
     const exportBtn = document.getElementById('exportBtn');
     const statusDiv = document.getElementById('status');
 
-    let kneeChart, cadenceChart, hipChart, vertOscChart, contactChart;
+    let kneeChart, cadenceChart, hipChart, vertOscChart, contactChart, frontalChart;
 
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -513,7 +525,7 @@
         data: {
           labels: [],
           datasets: [{
-            label: 'Hip Drop (°)',
+            label: 'Hip Drop (Sagittal, °)',
             data: [],
             borderColor: '#e74c3c',
             backgroundColor: 'rgba(231, 76, 60, 0.1)',
@@ -570,6 +582,43 @@
           }
         }
       });
+
+      frontalChart = new Chart(document.getElementById('frontalChart'), {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Pelvic Drop (Frontal, °)',
+              data: [],
+              borderColor: '#e67e22',
+              backgroundColor: 'rgba(230, 126, 34, 0.1)',
+              tension: 0.4
+            },
+            {
+              label: 'Knee FPPA Left (°)',
+              data: [],
+              borderColor: '#c0392b',
+              backgroundColor: 'rgba(192, 57, 43, 0.1)',
+              tension: 0.4
+            },
+            {
+              label: 'Knee FPPA Right (°)',
+              data: [],
+              borderColor: '#2980b9',
+              backgroundColor: 'rgba(41, 128, 185, 0.1)',
+              tension: 0.4
+            }
+          ]
+        },
+        options: {
+          ...commonOptions,
+          scales: {
+            ...commonOptions.scales,
+            y: { ...commonOptions.scales.y, title: { display: true, text: 'Angle (°)' }, beginAtZero: false }
+          }
+        }
+      });
     }
 
     function updateCharts() {
@@ -577,7 +626,6 @@
 
       const maxPoints = 100;
       const startIdx = Math.max(0, chartData.timestamps.length - maxPoints);
-
       const labels = chartData.timestamps.slice(startIdx);
 
       kneeChart.data.labels = labels;
@@ -600,6 +648,12 @@
       contactChart.data.labels = labels;
       contactChart.data.datasets[0].data = chartData.contactTime.slice(startIdx);
       contactChart.update('none');
+
+      frontalChart.data.labels = labels;
+      frontalChart.data.datasets[0].data = chartData.pelvicDropFrontal.slice(startIdx);
+      frontalChart.data.datasets[1].data = chartData.kneeFpaaLeft.slice(startIdx);
+      frontalChart.data.datasets[2].data = chartData.kneeFpaaRight.slice(startIdx);
+      frontalChart.update('none');
     }
 
     // =========================
@@ -615,7 +669,7 @@
           await tf.ready();
           ok = true;
           break;
-        } catch (e) { /* try next */ }
+        } catch (e) {}
       }
       if (!ok) throw new Error('No TFJS backend could be initialized.');
       return tf.getBackend();
@@ -726,7 +780,6 @@
         statusDiv.className = 'status ready';
         statusDiv.innerHTML = '🎥 Camera Active - Ready to Analyze';
 
-        lastFrameTime = performance.now();
         fpsUpdateTime = performance.now();
         detectPose();
 
@@ -770,7 +823,6 @@
       if (!isRunning) return;
 
       const currentTime = performance.now();
-
       frameCount++;
       if (currentTime - fpsUpdateTime >= 1000) {
         fps = Math.round(frameCount * 1000 / (currentTime - fpsUpdateTime));
@@ -788,9 +840,7 @@
           const keypoints = pose.keypoints;
 
           drawSkeleton(keypoints);
-
           analyzeGait(keypoints, currentTime);
-
         }
       } catch (error) {
         console.error('Pose detection error:', error);
@@ -879,7 +929,6 @@
 
       const conf = getConfidenceLevel(keypoints, [0,5,6,11,12,13,14,15,16]);
       document.getElementById('confDisplay').textContent = 'Conf: ' + conf + '%';
-
       if (conf < 60) {
         addIssue('warning', 'Low tracking confidence (' + conf + '%)');
       }
@@ -898,17 +947,20 @@
         stanceFlightRatio: 0,
         footStrike: 'Unknown',
         gaitPhase: currentPhase,
+        pelvicDropFrontal: 0,
+        kneeFpaaLeft: 0,
+        kneeFpaaRight: 0,
+        stepWidth: 0,
         issues: []
       };
 
-      // GRF (simplified phase-based)
-      const grfData = calculateGroundReactionForce(kpMap, subjectData);
+      const grfData = calculateGroundReactionForce(subjectData);
       currentData.grfLeft = grfData.left;
       currentData.grfRight = grfData.right;
       document.getElementById('grfLeft').innerHTML = Math.round(grfData.left) + '<span class="metric-unit">N</span>';
       document.getElementById('grfRight').innerHTML = Math.round(grfData.right) + '<span class="metric-unit">N</span>';
 
-      // Left knee
+      // Left knee flexion
       if (kpMap[11] && kpMap[13] && kpMap[15]) {
         const angle = calculateAngle(kpMap[11], kpMap[13], kpMap[15]);
         kneeAngles.push(angle);
@@ -926,7 +978,7 @@
         }
       }
 
-      // Right knee
+      // Right knee flexion
       if (kpMap[12] && kpMap[14] && kpMap[16]) {
         const angle = calculateAngle(kpMap[12], kpMap[14], kpMap[16]);
         kneeAnglesRight.push(angle);
@@ -944,7 +996,7 @@
         }
       }
 
-      // Hip drop
+      // Hip drop (sagittal approximation)
       if (kpMap[11] && kpMap[12]) {
         const hipDrop = Math.abs(kpMap[11].y - kpMap[12].y);
         const hipDropAngle = Math.atan2(hipDrop, Math.abs(kpMap[11].x - kpMap[12].x) || 1) * 180 / Math.PI;
@@ -953,30 +1005,27 @@
         currentData.hipDrop = parseFloat(hipDropAngle.toFixed(1));
 
         if (hipDropAngle > 8) {
-          const issue = 'Excessive hip drop - ITB/hip abductor risk';
+          const issue = 'Excessive hip drop (sagittal proxy)';
           addIssue('critical', issue);
           currentData.issues.push(issue);
           segmentIssues.hip = true;
         }
       }
 
-      // Gait phase (treadmill)
-      if (kpMap[11] || kpMap[12]) {
-        const phaseInfo = detectContactPhase(kpMap);
-        currentData.gaitPhase = phaseInfo.phase;
-        currentData.contactTime = phaseInfo.contactTime;
-        currentData.stanceFlightRatio = phaseInfo.stanceFlightRatio;
-
-        if (phaseInfo.contactTime > 0) {
-          document.getElementById('contactTime').innerHTML =
-            Math.round(phaseInfo.contactTime) + '<span class="metric-unit">ms</span>';
-        }
-        document.getElementById('stanceFlightRatio').textContent = phaseInfo.stanceFlightRatio.toFixed(2);
+      // Gait phase / contact time / stance-flight
+      const phaseInfo = detectContactPhase(kpMap);
+      currentData.gaitPhase = phaseInfo.phase;
+      currentData.contactTime = phaseInfo.contactTime;
+      currentData.stanceFlightRatio = phaseInfo.stanceFlightRatio;
+      if (phaseInfo.contactTime > 0) {
+        document.getElementById('contactTime').innerHTML =
+          Math.round(phaseInfo.contactTime) + '<span class="metric-unit">ms</span>';
       }
+      document.getElementById('stanceFlightRatio').textContent = phaseInfo.stanceFlightRatio.toFixed(2);
 
-      // Cadence from step history
-      const now = Date.now();
-      const cadenceVal = computeCadence(now);
+      // Cadence
+      const nowMs = Date.now();
+      const cadenceVal = computeCadence(nowMs);
       currentData.cadence = cadenceVal;
       if (cadenceVal > 0) {
         document.getElementById('cadence').innerHTML =
@@ -1026,12 +1075,40 @@
           vertOsc.toFixed(1) + '<span class="metric-unit">cm</span>';
       }
 
-      // Foot strike pattern
+      // Foot strike
       const footStrike = detectFootStrike(kpMap);
       currentData.footStrike = footStrike;
       document.getElementById('footStrike').textContent = footStrike.replace('_', ' ');
 
-      // Record
+      // --- Frontal plane metrics ---
+      const pelvicDropFrontal = calculateFrontalPelvicDrop(kpMap);
+      currentData.pelvicDropFrontal = pelvicDropFrontal;
+      document.getElementById('pelvicDropFrontal').innerHTML =
+        pelvicDropFrontal.toFixed(1) + '<span class="metric-unit">°</span>';
+
+      const leftFPPA = calculateFPPA(kpMap[13], kpMap[11], kpMap[15]);
+      const rightFPPA = calculateFPPA(kpMap[14], kpMap[12], kpMap[16]);
+      currentData.kneeFpaaLeft = leftFPPA;
+      currentData.kneeFpaaRight = rightFPPA;
+      document.getElementById('kneeFpaaLeft').innerHTML =
+        leftFPPA.toFixed(1) + '<span class="metric-unit">°</span>';
+      document.getElementById('kneeFpaaRight').innerHTML =
+        rightFPPA.toFixed(1) + '<span class="metric-unit">°</span>';
+
+      const stepWidth = calculateStepWidth(kpMap);
+      currentData.stepWidth = stepWidth;
+      document.getElementById('stepWidth').innerHTML =
+        stepWidth.toFixed(1) + '<span class="metric-unit">cm</span>';
+
+      if (Math.abs(pelvicDropFrontal) > 10) {
+        addIssue('warning', 'Excessive frontal pelvic drop');
+        currentData.issues.push('Excessive frontal pelvic drop');
+      }
+      if (leftFPPA > 10 || rightFPPA > 10) {
+        addIssue('warning', 'Increased frontal knee valgus (FPPA)');
+        currentData.issues.push('Increased FPPA');
+      }
+
       if (isRecording) {
         recordedData.push(currentData);
 
@@ -1042,12 +1119,15 @@
         chartData.hipDrop.push(currentData.hipDrop);
         chartData.verticalOsc.push(currentData.verticalOsc);
         chartData.contactTime.push(currentData.contactTime);
+        chartData.pelvicDropFrontal.push(currentData.pelvicDropFrontal);
+        chartData.kneeFpaaLeft.push(currentData.kneeFpaaLeft);
+        chartData.kneeFpaaRight.push(currentData.kneeFpaaRight);
 
         if (recordedData.length % 10 === 0) updateCharts();
       }
     }
 
-    function calculateGroundReactionForce(kpMap, subject) {
+    function calculateGroundReactionForce(subject) {
       const g = 9.81;
       const mass = subject.mass;
       const bodyWeight = mass * g;
@@ -1114,7 +1194,7 @@
       if (!lastPhaseChangeTime) lastPhaseChangeTime = now;
 
       if (currentPhase !== lastPhase) {
-        const duration = now - lastPhaseChangeTime; // ms
+        const duration = now - lastPhaseChangeTime;
         if (lastPhase === 'left_contact' || lastPhase === 'right_contact' || lastPhase === 'double_contact') {
           contactDurations.push(duration);
           if (contactDurations.length > 50) contactDurations.shift();
@@ -1126,17 +1206,13 @@
 
       if (contactDurations.length > 1) {
         const avgContact = contactDurations.reduce((a,b) => a + b, 0) / contactDurations.length;
-        const estStepTime = 60000 / (computeCadence(Date.now()) || 180);
-        const estFlight = estStepTime - avgContact;
-        result.stanceFlightRatio = estContactRatio(avgContact, estFlight);
+        const cad = computeCadence(Date.now()) || 180;
+        const estStepTime = 60000 / cad;
+        const estFlight = Math.max(0, estStepTime - avgContact);
+        result.stanceFlightRatio = estFlight / (avgContact || 1);
       }
 
       return result;
-    }
-
-    function estContactRatio(contactMs, flightMs) {
-      if (contactMs <= 0) return 0;
-      return flightMs / contactMs;
     }
 
     function computeCadence(now) {
@@ -1213,6 +1289,51 @@
       return 'unknown';
     }
 
+    // Frontal-plane helpers
+    function calculateFrontalPelvicDrop(kpMap) {
+      const leftHip = kpMap[11];
+      const rightHip = kpMap[12];
+      if (!leftHip || !rightHip || leftHip.score < 0.5 || rightHip.score < 0.5) return 0;
+
+      const dx = rightHip.x - leftHip.x;
+      const dy = rightHip.y - leftHip.y;
+      const angleDeg = Math.atan2(dy, dx || 1) * 180 / Math.PI;
+      return angleDeg;
+    }
+
+    function calculateFPPA(knee, hip, ankle) {
+      if (!knee || !hip || !ankle ||
+          knee.score < 0.5 || hip.score < 0.5 || ankle.score < 0.5) return 0;
+
+      const v1x = knee.x - hip.x;
+      const v1y = knee.y - hip.y;
+      const v2x = knee.x - ankle.x;
+      const v2y = knee.y - ankle.y;
+
+      const dot = v1x * v2x + v1y * v2y;
+      const mag1 = Math.sqrt(v1x*v1x + v1y*v1y) || 1;
+      const mag2 = Math.sqrt(v2x*v2x + v2y*v2y) || 1;
+      let angle = Math.acos(Math.max(-1, Math.min(1, dot / (mag1 * mag2)))) * 180 / Math.PI;
+
+      const midX = (hip.x + ankle.x) / 2;
+      const medial = knee.x < midX;
+      if (medial) angle = +angle;
+      else angle = -angle;
+      return angle;
+    }
+
+    function calculateStepWidth(kpMap) {
+      const leftFoot = kpMap[15];
+      const rightFoot = kpMap[16];
+      const heightCm = parseFloat(document.getElementById('subjectHeight').value) || 170;
+
+      if (!leftFoot || !rightFoot || leftFoot.score < 0.5 || rightFoot.score < 0.5) return 0;
+
+      const pixelDistance = Math.abs(leftFoot.x - rightFoot.x);
+      const pixelToMeter = (heightCm / 100) / Math.max(canvas.width, canvas.height);
+      return pixelDistance * pixelToMeter * 100;
+    }
+
     function updatePhaseIndicator(phase) {
       for (let i = 1; i <= 4; i++) {
         const dot = document.getElementById('phase' + i);
@@ -1263,7 +1384,10 @@
           cadence: [],
           hipDrop: [],
           verticalOsc: [],
-          contactTime: []
+          contactTime: [],
+          pelvicDropFrontal: [],
+          kneeFpaaLeft: [],
+          kneeFpaaRight: []
         };
         stepHistory = [];
         contactDurations = [];
@@ -1296,7 +1420,7 @@
              ' years, Mass: ' + subjectData.mass + ' kg, Height: ' + subjectData.height + ' cm\n';
       csv += 'Date: ' + new Date().toLocaleString() + '\n\n';
 
-      csv += 'Timestamp (s),Knee Flexion Left (°),Knee Flexion Right (°),Hip Drop (°),Cadence (steps/min),GRF Left (N),GRF Right (N),Stride Length (cm),Vertical Oscillation (cm),Contact Time (ms),Stance/Flight Ratio,Foot Strike,Overstride Risk,Gait Phase,Issues\n';
+      csv += 'Timestamp (s),Knee Flexion Left (°),Knee Flexion Right (°),Hip Drop Sagittal (°),Cadence (steps/min),GRF Left (N),GRF Right (N),Stride Length (cm),Vertical Oscillation (cm),Contact Time (ms),Stance/Flight Ratio,Foot Strike,Overstride Risk,Gait Phase,Pelvic Drop Frontal (°),Knee FPPA Left (°),Knee FPPA Right (°),Step Width (cm),Issues\n';
 
       recordedData.forEach(row => {
         csv += [
@@ -1314,6 +1438,10 @@
           '"' + (row.footStrike || '') + '"',
           '"' + row.overstride + '"',
           '"' + row.gaitPhase + '"',
+          row.pelvicDropFrontal.toFixed ? row.pelvicDropFrontal.toFixed(2) : row.pelvicDropFrontal,
+          row.kneeFpaaLeft.toFixed ? row.kneeFpaaLeft.toFixed(2) : row.kneeFpaaLeft,
+          row.kneeFpaaRight.toFixed ? row.kneeFpaaRight.toFixed(2) : row.kneeFpaaRight,
+          row.stepWidth.toFixed ? row.stepWidth.toFixed(2) : row.stepWidth,
           '"' + row.issues.join('; ') + '"'
         ].join(',') + '\n';
       });
@@ -1332,12 +1460,16 @@
 
       addSummaryRow('Knee Flexion Left (°)', d => d.kneeFlexionLeft);
       addSummaryRow('Knee Flexion Right (°)', d => d.kneeFlexionRight);
-      addSummaryRow('Hip Drop (°)', d => d.hipDrop);
+      addSummaryRow('Hip Drop Sagittal (°)', d => d.hipDrop);
       addSummaryRow('Cadence (steps/min)', d => d.cadence);
       addSummaryRow('Stride Length (cm)', d => d.strideLength || 0);
       addSummaryRow('Vertical Oscillation (cm)', d => d.verticalOsc || 0);
       addSummaryRow('Contact Time (ms)', d => d.contactTime || 0);
       addSummaryRow('Stance/Flight Ratio', d => d.stanceFlightRatio || 0);
+      addSummaryRow('Pelvic Drop Frontal (°)', d => d.pelvicDropFrontal || 0);
+      addSummaryRow('Knee FPPA Left (°)', d => d.kneeFpaaLeft || 0);
+      addSummaryRow('Knee FPPA Right (°)', d => d.kneeFpaaRight || 0);
+      addSummaryRow('Step Width (cm)', d => d.stepWidth || 0);
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -1347,6 +1479,9 @@
       a.download = 'gait_running_report_' + timeStr + '.csv';
       a.click();
       URL.revokeObjectURL(url);
+
+      statusDiv.className = 'status ready';
+      statusDiv.innerHTML = '✓ CSV file exported successfully!';
     }
 
     // =========================
