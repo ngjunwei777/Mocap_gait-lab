@@ -480,7 +480,7 @@
 
   <!-- Charts section: ONLY GRF curve step + deficiency amount displayed in chart -->
   <div class="charts-section">
-    <h3>📊 GRF Curve + Deficiency Amount (Selected Step)</h3>
+    <h3>📊 GRF Curve + Deficiency Sub-scores (Selected Step)</h3>
 
     <div class="chart-container">
       <div class="step-select">
@@ -490,7 +490,9 @@
         </select>
       </div>
       <canvas id="grfCurveChart"></canvas>
-      <div class="tiny">BW curve = GRF proxy. Deficiency score is displayed as an overlay (0–100) for the selected step.</div>
+      <div class="tiny">
+        BW curve = GRF proxy. Right axis overlays show 0–100 sub-scores: Collapser / Overstrider / Bouncer / Crossover.
+      </div>
     </div>
   </div>
 
@@ -612,7 +614,7 @@
       plugins: {
         legend: { display: true },
         title: { display: true, text: 'GRF Proxy (BW) vs time from IC' },
-        subtitle: { display: true, text: 'Select a step to view GRF curve + deficiency amount' }
+        subtitle: { display: true, text: 'Select a step to view GRF curve + deficiency sub-scores' }
       }
     };
 
@@ -627,13 +629,38 @@
             tension: 0.25,
             pointRadius: 0
           },
+          // Right-axis: 4 separate 0–100 sub-score lines
           {
-            label: 'Deficiency Score (0-100)',
+            label: 'Collapser (0–100)',
             data: [],
             tension: 0,
             pointRadius: 0,
             yAxisID: 'y2',
             borderDash: [6, 6]
+          },
+          {
+            label: 'Overstrider (0–100)',
+            data: [],
+            tension: 0,
+            pointRadius: 0,
+            yAxisID: 'y2',
+            borderDash: [10, 6]
+          },
+          {
+            label: 'Bouncer (0–100)',
+            data: [],
+            tension: 0,
+            pointRadius: 0,
+            yAxisID: 'y2',
+            borderDash: [2, 6]
+          },
+          {
+            label: 'Crossover (0–100)',
+            data: [],
+            tension: 0,
+            pointRadius: 0,
+            yAxisID: 'y2',
+            borderDash: [14, 6, 2, 6]
           }
         ]
       },
@@ -644,7 +671,7 @@
           y: { title: { display: true, text: 'BW (proxy)' }, suggestedMin: 1.0, suggestedMax: 3.2 },
           y2: {
             position: 'right',
-            title: { display: true, text: 'Deficiency (0–100)' },
+            title: { display: true, text: 'Deficiency sub-scores (0–100)' },
             min: 0,
             max: 100,
             grid: { drawOnChartArea: false }
@@ -689,6 +716,9 @@
       grfCurveChart.data.labels = [];
       grfCurveChart.data.datasets[0].data = [];
       grfCurveChart.data.datasets[1].data = [];
+      grfCurveChart.data.datasets[2].data = [];
+      grfCurveChart.data.datasets[3].data = [];
+      grfCurveChart.data.datasets[4].data = [];
       grfCurveChart.options.plugins.title.text = 'GRF Proxy (BW) vs time from IC';
       grfCurveChart.options.plugins.subtitle.text = 'No GRF curve for selected step.';
       grfCurveChart.update('none');
@@ -698,13 +728,19 @@
     const labels = step.grfCurve.map(p => String(Math.round(p.tRelMs)));
     const bw = step.grfCurve.map(p => p.bw);
 
-    // deficiency score as flat overlay line across stance time
-    const score = (typeof step.deficiencyScore === 'number') ? step.deficiencyScore : 0;
-    const scoreLine = step.grfCurve.map(_ => score);
+    // Subscores (0–100) — flat overlay lines across stance time
+    const subs = step.deficiencySubscores || computeDeficiencySubscores(step);
+    const collLine = step.grfCurve.map(_ => subs.collapser);
+    const overLine = step.grfCurve.map(_ => subs.overstrider);
+    const bounceLine = step.grfCurve.map(_ => subs.bouncer);
+    const crossLine = step.grfCurve.map(_ => subs.crossover);
 
     grfCurveChart.data.labels = labels;
     grfCurveChart.data.datasets[0].data = bw;
-    grfCurveChart.data.datasets[1].data = scoreLine;
+    grfCurveChart.data.datasets[1].data = collLine;
+    grfCurveChart.data.datasets[2].data = overLine;
+    grfCurveChart.data.datasets[3].data = bounceLine;
+    grfCurveChart.data.datasets[4].data = crossLine;
 
     const bits = [];
     if (step.tags?.includes('Overstrider')) bits.push(`Overstride FSR ${step.overstrideFSR?.toFixed(2) ?? '—'}`);
@@ -712,9 +748,11 @@
     if (step.tags?.includes('Bouncer')) bits.push(`VO ${step.voCmAtIC?.toFixed(1) ?? '—'}cm`);
     if (step.tags?.includes('Crossover')) bits.push(`Crossover (midline)`);
 
+    const total = (typeof step.deficiencyScore === 'number') ? Math.round(step.deficiencyScore) : Math.round(computeDeficiencyScore(step));
     grfCurveChart.options.plugins.title.text = `Step #${step.idx} (${step.side}) — GRF Proxy`;
     grfCurveChart.options.plugins.subtitle.text =
-      `Deficiency: ${Math.round(score)}/100` + (bits.length ? ` • ${bits.join(' • ')}` : '');
+      `Total Def: ${total}/100 • Coll ${Math.round(subs.collapser)} • Over ${Math.round(subs.overstrider)} • Bounce ${Math.round(subs.bouncer)} • Cross ${Math.round(subs.crossover)}`
+      + (bits.length ? ` • ${bits.join(' • ')}` : '');
 
     grfCurveChart.update('none');
   }
@@ -807,8 +845,11 @@
       grfCurveChart.data.labels = [];
       grfCurveChart.data.datasets[0].data = [];
       grfCurveChart.data.datasets[1].data = [];
+      grfCurveChart.data.datasets[2].data = [];
+      grfCurveChart.data.datasets[3].data = [];
+      grfCurveChart.data.datasets[4].data = [];
       grfCurveChart.options.plugins.title.text = 'GRF Proxy (BW) vs time from IC';
-      grfCurveChart.options.plugins.subtitle.text = 'Select a step to view GRF curve + deficiency amount';
+      grfCurveChart.options.plugins.subtitle.text = 'Select a step to view GRF curve + deficiency sub-scores';
       grfCurveChart.update('none');
     }
     rebuildStepPicker();
@@ -1175,27 +1216,22 @@
   function sex() { return subjectSexEl.value; }
 
   function thresholds() {
-    // pragmatic sex-aware offsets (small), and persistence prevents over-flagging
     const isF = sex() === 'female';
 
     return {
       collapser: {
-        // pelvic drop proxy (deg) in FRONTAL
         moderate: isF ? 7 : 6,
         high:     isF ? 11 : 10
       },
       overstride: {
-        // FSR = |ankleX-hipMidX| / legLenPx at IC in SAGITTAL
         moderate: isF ? 0.22 : 0.20,
         high:     isF ? 0.32 : 0.30
       },
       bouncer: {
-        // VO: flag if VO_cm > 10 OR VO_ratio > 0.06 (6% height)
         voCm: isF ? 11 : 10,
         voRatio: 0.06
       },
       crossover: {
-        // midline crossing is primary; step width cm helps support it
         narrowStepWidthCm: 5
       },
       persistence: { window: 5, minCount: 3 }
@@ -1238,11 +1274,9 @@
 
     const pxToCm = estimatePxToCm(nose, ankleL, ankleR, subject.height);
 
-    // Pelvic drop proxy (best in FRONTAL)
     const pelvicTiltDeg = computePelvicTiltDeg(hipL, hipR);
     document.getElementById('pelvicTilt').innerHTML = `${pelvicTiltDeg.toFixed(1)}<span class="metric-unit">°</span>`;
 
-    // VO (height-calibrated)
     const hipMidY = midY(hipL, hipR);
     let voCmLive = gait.vo.lastVOcm;
     if (hipMidY != null && pxToCm) {
@@ -1256,17 +1290,14 @@
       }
     }
 
-    // knee angles
     const kneeDegL = (hipL && kneeL && ankleL) ? calculateAngle(hipL, kneeL, ankleL) : null;
     const kneeDegR = (hipR && kneeR && ankleR) ? calculateAngle(hipR, kneeR, ankleR) : null;
 
-    // Frontal knee drift proxy
     if (m === 'frontal') {
       const drift = computeKneeMedialDriftProxyDeg(hipL, kneeL, ankleL, hipR, kneeR, ankleR);
       modeMetricValue.textContent = `${drift.toFixed(1)}°`;
     }
 
-    // feet
     handleFoot('L', tNowMs, ankleL, hipL, hipR, kneeDegL, pelvicTiltDeg, pxToCm, m, voCmLive, subject.height);
     handleFoot('R', tNowMs, ankleR, hipL, hipR, kneeDegR, pelvicTiltDeg, pxToCm, m, voCmLive, subject.height);
 
@@ -1281,12 +1312,10 @@
     const f = gait.feet[side];
     if (!ankle) return;
 
-    // ground baseline follows slowly to max y
     const alpha = 0.05;
     if (f.groundY == null) f.groundY = ankle.y;
     f.groundY = (1 - alpha) * f.groundY + alpha * Math.max(f.groundY, ankle.y);
 
-    // hysteresis for contact
     const thrOn = 18, thrOff = 26;
     const dist = f.groundY - ankle.y;
 
@@ -1294,7 +1323,6 @@
     if (!f.contact && dist < thrOn) contactNow = true;
     if (f.contact && dist > thrOff) contactNow = false;
 
-    // v & a
     const dt = Math.max(1e-3, (tNow - f.prev.t) / 1000);
     const vY = (f.prev.ok) ? (ankle.y - f.prev.y) / dt : 0;
     const aY = (dt > 0) ? (vY - (f.prevVY || 0)) / dt : 0;
@@ -1307,10 +1335,8 @@
     if (f.active && f.active.inStance) {
       if (typeof kneeDeg === 'number') f.active.samples.push({ t: tNow, kneeDeg });
 
-      // Collapser uses max pelvic drop during stance (FRONTAL)
       f.active.pelvicTiltMaxDeg = Math.max(f.active.pelvicTiltMaxDeg, pelvicTiltDeg);
 
-      // GRF curve: store throughout stance (downsample)
       const decel = Math.max(0, -aY);
       const bw = mapDecelProxyToBW(decel);
       const tRelMs = tNow - f.active.tIC_ms;
@@ -1339,7 +1365,6 @@
 
     const f = gait.feet[side];
 
-    // debounce
     const minICGapMs = 220;
     if (f.lastIC && (tIC - f.lastIC) < minICGapMs) return;
 
@@ -1348,19 +1373,16 @@
     const hipLegX = (hipForLeg && hipForLeg.score > 0.3) ? hipForLeg.x : hipMidX;
     const hipLegY = (hipForLeg && hipForLeg.score > 0.3) ? hipForLeg.y : midY(hipL, hipR);
 
-    // fill swing time for last same-side step (TO -> this IC)
     const lastSame = findLastStepOfSide(side);
     if (lastSame && typeof lastSame.tTO_ms === 'number' && typeof lastSame.swingTimeS !== 'number') {
       lastSame.swingTimeS = (tIC - lastSame.tTO_ms) / 1000;
     }
 
-    // stride proxy from hip mid X between same-side ICs (calibrated by height pxToCm)
     if (pxToCm && f.lastIC_hipX != null && hipMidX != null) {
       const strideCm = Math.abs(hipMidX - f.lastIC_hipX) * pxToCm;
       if (lastSame && typeof lastSame.strideCm !== 'number') lastSame.strideCm = strideCm;
     }
 
-    // start active
     f.active = {
       side,
       tIC_ms: tIC,
@@ -1379,7 +1401,6 @@
       grfPeakBW: null,
       grfTimeToPeakMs: null,
       notes: '',
-      // NEW: deficiency fields (per recommendation)
       overstrideFSR: null,
       crossover: null,
       stepWidthCmAtIC: null,
@@ -1388,7 +1409,6 @@
       tags: []
     };
 
-    // ====== Overstride logic (sagittal only): normalize by leg length at IC ======
     if (mode === 'sagittal') {
       const legLenPx = (hipLegX != null && hipLegY != null)
         ? Math.hypot(ankle.x - hipLegX, ankle.y - hipLegY)
@@ -1404,7 +1424,6 @@
       f.active.overstrideLevel = os.level;
       modeMetricValue.textContent = os.level;
 
-      // label + persistence
       const th = thresholds().overstride;
       const highNow = (typeof fsr === 'number') && fsr >= th.high;
       const modNow  = (typeof fsr === 'number') && fsr >= th.moderate;
@@ -1418,7 +1437,6 @@
       }
     }
 
-    // ====== Crossover logic (frontal only): midline crossing at IC ======
     if (mode === 'frontal') {
       const midlineX = midX(hipL, hipR);
       if (midlineX != null) {
@@ -1442,7 +1460,6 @@
       }
     }
 
-    // store cadence IC times
     gait.icTimes.push(tIC);
     if (gait.icTimes.length > 12) gait.icTimes.shift();
 
@@ -1472,7 +1489,6 @@
     f.active.grfPeakBW = grfBW;
     f.active.landingQuality = classifyLanding(grfBW, ttpMs);
 
-    // ====== Collapser logic (frontal only): peak pelvic drop proxy in stance ======
     if (viewMode() === 'frontal') {
       const c = thresholds().collapser;
       const drop = f.active.pelvicTiltMaxDeg || 0;
@@ -1490,7 +1506,6 @@
       }
     }
 
-    // ====== Bouncer logic: VO per IC (sex-aware, height-aware) ======
     const b = thresholds().bouncer;
     const voCm = (typeof f.active.voCmAtIC === 'number') ? f.active.voCmAtIC : 0;
     const voRatio = (typeof f.active.voRatioAtIC === 'number') ? f.active.voRatioAtIC : 0;
@@ -1501,7 +1516,6 @@
       f.active.notes += 'High VO; ';
     }
 
-    // existing issues retained
     if (typeof f.active.kneeMidStanceDeg === 'number' && f.active.kneeMidStanceDeg > 165) {
       addIssue('warning', `${side}: Low mid-stance knee flexion`);
       f.active.notes += 'Low mid-stance knee flexion; ';
@@ -1541,41 +1555,71 @@
     document.getElementById('grfTTP').innerHTML = `${(step.grfTimeToPeakMs ?? 0).toFixed(0)}<span class="metric-unit">ms</span>`;
   }
 
-  // ====== Deficiency scoring (0–100) for chart overlay ======
+  // ============================================================
+  // Deficiency sub-scores (0–100 each) + total score
+  // ============================================================
   function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+  function clamp100(x) { return Math.max(0, Math.min(100, x)); }
 
-  function computeDeficiencyScore(step) {
+  function computeDeficiencySubscores(step) {
     const th = thresholds();
-    let score = 0;
 
-    // Overstrider contribution (sagittal)
+    // Overstrider: 0 at <moderate, 100 at >=high (linear between)
+    let over = 0;
     if (typeof step.overstrideFSR === 'number') {
       const fsr = step.overstrideFSR;
-      const s = (fsr - th.overstride.moderate) / (th.overstride.high - th.overstride.moderate);
-      score += 35 * clamp01(s);
+      const s = (fsr - th.overstride.moderate) / (th.overstride.high - th.overstride.moderate || 1);
+      over = clamp100(100 * clamp01(s));
     }
 
-    // Collapser contribution (frontal)
+    // Collapser: pelvic drop max
+    let coll = 0;
     if (typeof step.pelvicTiltMaxDeg === 'number') {
       const d = step.pelvicTiltMaxDeg;
-      const s = (d - th.collapser.moderate) / (th.collapser.high - th.collapser.moderate);
-      score += 30 * clamp01(s);
+      const s = (d - th.collapser.moderate) / (th.collapser.high - th.collapser.moderate || 1);
+      coll = clamp100(100 * clamp01(s));
     }
 
-    // Bouncer contribution
-    if (typeof step.voCmAtIC === 'number' || typeof step.voRatioAtIC === 'number') {
-      const voCm = step.voCmAtIC ?? 0;
-      const voRatio = step.voRatioAtIC ?? 0;
-      // combine two signals conservatively
-      const s1 = (voCm - th.bouncer.voCm) / (th.bouncer.voCm * 0.5 || 1);
-      const s2 = (voRatio - th.bouncer.voRatio) / (th.bouncer.voRatio * 0.5 || 1);
-      score += 20 * clamp01(Math.max(s1, s2));
+    // Bouncer: max of VO cm and VO ratio signals
+    let bounce = 0;
+    {
+      const voCm = (typeof step.voCmAtIC === 'number') ? step.voCmAtIC : null;
+      const voRatio = (typeof step.voRatioAtIC === 'number') ? step.voRatioAtIC : null;
+
+      const s1 = (voCm != null)
+        ? (voCm - th.bouncer.voCm) / (th.bouncer.voCm * 0.5 || 1)
+        : -Infinity;
+
+      const s2 = (voRatio != null)
+        ? (voRatio - th.bouncer.voRatio) / (th.bouncer.voRatio * 0.5 || 1)
+        : -Infinity;
+
+      bounce = clamp100(100 * clamp01(Math.max(s1, s2, 0)));
     }
 
-    // Crossover contribution
-    if (step.crossover === true) score += 15;
+    // Crossover: binary midline crossing + narrow step width support
+    let cross = 0;
+    if (step.crossover === true) cross = 100;
+    else if (typeof step.stepWidthCmAtIC === 'number' && step.stepWidthCmAtIC < th.crossover.narrowStepWidthCm) cross = 70;
+    else cross = 0;
 
-    return Math.max(0, Math.min(100, score));
+    return {
+      collapser: coll,
+      overstrider: over,
+      bouncer: bounce,
+      crossover: cross
+    };
+  }
+
+  function computeDeficiencyScore(step) {
+    // weighted total remains 0–100 for continuity (picker + XLSX)
+    const subs = step.deficiencySubscores || computeDeficiencySubscores(step);
+    const total =
+      0.30 * subs.collapser +
+      0.35 * subs.overstrider +
+      0.20 * subs.bouncer +
+      0.15 * subs.crossover;
+    return clamp100(total);
   }
 
   function finalizeStep(step) {
@@ -1595,7 +1639,6 @@
       overstrideLevel: step.overstrideLevel,
       grfCurve: step.grfCurve || [],
       notes: (step.notes || '').trim(),
-      // NEW: per-step deficiency values
       overstrideFSR: step.overstrideFSR,
       crossover: step.crossover,
       stepWidthCmAtIC: step.stepWidthCmAtIC,
@@ -1604,14 +1647,14 @@
       tags: Array.isArray(step.tags) ? step.tags.slice() : []
     };
 
-    // compute score at finalize (used by chart overlay + picker text)
+    // NEW: store subscores + total
+    row.deficiencySubscores = computeDeficiencySubscores(row);
     row.deficiencyScore = computeDeficiencyScore(row);
 
     gait.steps.push(row);
 
     rebuildStepPicker();
 
-    // show last step curve by selecting it
     stepPicker.value = String(row.idx);
     renderSelectedGRFCurve();
 
@@ -1731,7 +1774,7 @@
   // ============================================================
   function mapDecelProxyToBW(p) {
     const x = Math.max(0, Math.min(p, 20000));
-    return 1.2 + 1.8 * (1 - Math.exp(-x / 6000)); // asymptote ~3.0
+    return 1.2 + 1.8 * (1 - Math.exp(-x / 6000));
   }
 
   function classifyLanding(grfBW, ttpMs) {
@@ -1863,7 +1906,7 @@
   }
 
   // ============================================================
-  // XLSX export (unchanged sheet set; added extra columns while keeping existing ones)
+  // XLSX export (adds subscores columns, keeps existing)
   // ============================================================
   async function exportToXLSX() {
     if (!gait.steps.length) return alert('No steps to export. Record first.');
@@ -1888,36 +1931,42 @@
       ['Mass (kg)', subject.mass],
       ['Height (cm)', subject.height],
       ['Copyright', '© 2025 Ng Jun Wei. All rights reserved.'],
-      ['Notes', 'Knee mid-stance = knee angle near 50% stance. GRF proxy curve = BW proxy over stance from ankle vertical decel. VO from hip-mid baseline filtered. Overstride uses FSR normalized by leg length px at IC. Collapser uses peak pelvic drop proxy during stance (frontal). Crossover uses midline crossing (frontal).']
+      ['Notes', 'Knee mid-stance = knee angle near 50% stance. GRF proxy curve = BW proxy over stance from ankle vertical decel. VO from hip-mid baseline filtered. Overstride uses FSR normalized by leg length px at IC. Collapser uses peak pelvic drop proxy during stance (frontal). Crossover uses midline crossing (frontal). Subscores are 0–100 each (Collapser/Overstrider/Bouncer/Crossover).']
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(subjectSheetData), 'Subject');
 
-    const rows = gait.steps.map(s => ({
-      'Step #': s.idx,
-      'Side': s.side,
-      'IC Time (ms)': Math.round(s.tIC_ms),
-      'TO Time (ms)': (typeof s.tTO_ms === 'number') ? Math.round(s.tTO_ms) : '',
-      'Stance Time (s)': (typeof s.stanceTimeS === 'number') ? Number(s.stanceTimeS.toFixed(3)) : '',
-      'Swing Time (s)': (typeof s.swingTimeS === 'number') ? Number(s.swingTimeS.toFixed(3)) : '',
-      'Stride Length (cm)': (typeof s.strideCm === 'number') ? Number(s.strideCm.toFixed(1)) : '',
-      'Knee Flexion Mid-Stance (°)': (typeof s.kneeMidStanceDeg === 'number') ? Number(s.kneeMidStanceDeg.toFixed(1)) : '',
-      'Pelvic Drop Max (° proxy)': (typeof s.pelvicTiltMaxDeg === 'number') ? Number(s.pelvicTiltMaxDeg.toFixed(2)) : '',
-      'GRF Peak (BW, proxy)': (typeof s.grfPeakBW === 'number') ? Number(s.grfPeakBW.toFixed(2)) : '',
-      'GRF Time-to-Peak (ms, proxy)': (typeof s.grfTimeToPeakMs === 'number') ? Number(s.grfTimeToPeakMs.toFixed(0)) : '',
-      'Landing Quality': s.landingQuality || '',
-      'Overstride Level (sagittal)': s.overstrideLevel || '',
-      'Overstride FSR (leg-normalized)': (typeof s.overstrideFSR === 'number') ? Number(s.overstrideFSR.toFixed(3)) : '',
-      'Crossover (midline)': (s.crossover === true) ? 'Yes' : (s.crossover === false ? 'No' : ''),
-      'Step width at IC (cm)': (typeof s.stepWidthCmAtIC === 'number') ? Number(s.stepWidthCmAtIC.toFixed(1)) : '',
-      'VO at IC (cm)': (typeof s.voCmAtIC === 'number') ? Number(s.voCmAtIC.toFixed(1)) : '',
-      'VO ratio at IC': (typeof s.voRatioAtIC === 'number') ? Number(s.voRatioAtIC.toFixed(4)) : '',
-      'Deficiency Score (0-100)': (typeof s.deficiencyScore === 'number') ? Number(s.deficiencyScore.toFixed(1)) : '',
-      'Tags': Array.isArray(s.tags) ? s.tags.join(', ') : '',
-      'Notes': s.notes || ''
-    }));
+    const rows = gait.steps.map(s => {
+      const subs = s.deficiencySubscores || computeDeficiencySubscores(s);
+      return ({
+        'Step #': s.idx,
+        'Side': s.side,
+        'IC Time (ms)': Math.round(s.tIC_ms),
+        'TO Time (ms)': (typeof s.tTO_ms === 'number') ? Math.round(s.tTO_ms) : '',
+        'Stance Time (s)': (typeof s.stanceTimeS === 'number') ? Number(s.stanceTimeS.toFixed(3)) : '',
+        'Swing Time (s)': (typeof s.swingTimeS === 'number') ? Number(s.swingTimeS.toFixed(3)) : '',
+        'Stride Length (cm)': (typeof s.strideCm === 'number') ? Number(s.strideCm.toFixed(1)) : '',
+        'Knee Flexion Mid-Stance (°)': (typeof s.kneeMidStanceDeg === 'number') ? Number(s.kneeMidStanceDeg.toFixed(1)) : '',
+        'Pelvic Drop Max (° proxy)': (typeof s.pelvicTiltMaxDeg === 'number') ? Number(s.pelvicTiltMaxDeg.toFixed(2)) : '',
+        'GRF Peak (BW, proxy)': (typeof s.grfPeakBW === 'number') ? Number(s.grfPeakBW.toFixed(2)) : '',
+        'GRF Time-to-Peak (ms, proxy)': (typeof s.grfTimeToPeakMs === 'number') ? Number(s.grfTimeToPeakMs.toFixed(0)) : '',
+        'Landing Quality': s.landingQuality || '',
+        'Overstride Level (sagittal)': s.overstrideLevel || '',
+        'Overstride FSR (leg-normalized)': (typeof s.overstrideFSR === 'number') ? Number(s.overstrideFSR.toFixed(3)) : '',
+        'Crossover (midline)': (s.crossover === true) ? 'Yes' : (s.crossover === false ? 'No' : ''),
+        'Step width at IC (cm)': (typeof s.stepWidthCmAtIC === 'number') ? Number(s.stepWidthCmAtIC.toFixed(1)) : '',
+        'VO at IC (cm)': (typeof s.voCmAtIC === 'number') ? Number(s.voCmAtIC.toFixed(1)) : '',
+        'VO ratio at IC': (typeof s.voRatioAtIC === 'number') ? Number(s.voRatioAtIC.toFixed(4)) : '',
+        'Collapser Subscore (0-100)': Number(subs.collapser.toFixed(1)),
+        'Overstrider Subscore (0-100)': Number(subs.overstrider.toFixed(1)),
+        'Bouncer Subscore (0-100)': Number(subs.bouncer.toFixed(1)),
+        'Crossover Subscore (0-100)': Number(subs.crossover.toFixed(1)),
+        'Deficiency Score (0-100)': (typeof s.deficiencyScore === 'number') ? Number(s.deficiencyScore.toFixed(1)) : '',
+        'Tags': Array.isArray(s.tags) ? s.tags.join(', ') : '',
+        'Notes': s.notes || ''
+      });
+    });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Steps');
 
-    // GRF curve sheet (long format)
     const curveRows = [];
     for (const s of gait.steps) {
       if (!s.grfCurve || !s.grfCurve.length) continue;
@@ -2072,7 +2121,6 @@
       snapshotBtn.disabled = true;
       playPauseBtn.disabled = true;
 
-      // ensure record button label is consistent at boot
       isRecording = false;
       setRecordingUI();
     } catch (e) {
