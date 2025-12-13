@@ -1,4 +1,4 @@
-# Gait Analysis System
+# Mocap_gait-lab
 
 AI-powered gait analysis tool for runners using pose estimation.
 
