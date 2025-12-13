@@ -6,6 +6,15 @@
   <title>Gait Biodynamics Lab - Camera + High-FPS Video Upload</title>
   <meta name="description" content="Step-based running gait analysis with MoveNet. Supports camera and high-FPS video upload, XLSX export, PNG snapshot, seek + frame-step, and GRF-time proxy curves.">
 
+  <!--
+    Gait Biodynamics Lab
+    Copyright (c) 2025 Ng Jun Wei
+    All rights reserved.
+
+    Permission is hereby granted to use this software for personal/educational purposes.
+    Redistribution, commercial use, or modification for resale requires written permission from Ng Jun Wei.
+  -->
+
   <!-- TFJS + Pose Detection -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0"></script>
@@ -33,13 +42,7 @@
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     }
     h1 { text-align:center; color:#667eea; margin-bottom:10px; font-size:2.35em; }
-    .subtitle { text-align:center; color:#666; margin-bottom:8px; }
-    .copyright {
-      text-align:center;
-      color:#777;
-      font-size:12px;
-      margin-bottom:16px;
-    }
+    .subtitle { text-align:center; color:#666; margin-bottom:16px; }
 
     .status { padding:10px; border-radius:8px; margin-bottom:16px; text-align:center; font-weight:650; }
     .status.loading { background:#fff3cd; color:#856404; }
@@ -62,7 +65,7 @@
     .info-section h3 { color:#667eea; margin-bottom:10px; }
     .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:12px; }
     label { display:block; margin-bottom:6px; font-weight:650; color:#666; }
-    select, input[type="number"], input[type="range"] {
+    select, input[type="number"] {
       width:100%;
       padding:10px;
       border:2px solid #667eea;
@@ -190,28 +193,39 @@
       box-shadow:0 2px 10px rgba(0,0,0,0.08);
     }
 
-    .issues-list {
+    .issues-wrap {
       background:white;
       padding:12px;
       border-radius:12px;
-      max-height: 240px;
-      overflow-y:auto;
       box-shadow:0 2px 10px rgba(0,0,0,0.08);
+    }
+    .issues-head {
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px;
+      margin-bottom:8px;
+    }
+    .tagrow { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+    .tag {
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:900;
+      color:#1f1f1f;
+      background:#f1f3f5;
+      border:1px solid #e9ecef;
+    }
+    .tag.on { background:#e8f0ff; border-color:#cfe0ff; }
+    .tag .dot { width:10px; height:10px; border-radius:50%; background:#bbb; }
+    .tag.on .dot { background:#667eea; }
+
+    .issues-list {
+      max-height: 200px;
+      overflow-y:auto;
     }
     .issue-item { padding:9px; margin-bottom:8px; border-radius:7px; font-size:13px; }
     .issue-item.warning { background:#fff3cd; border-left:3px solid #ffc107; }
     .issue-item.critical { background:#f8d7da; border-left:3px solid #dc3545; }
-    .issue-tag {
-      display:inline-block;
-      font-size:11px;
-      font-weight:900;
-      padding:3px 8px;
-      border-radius:999px;
-      background:#2c3e50;
-      color:#fff;
-      margin-right:8px;
-      vertical-align:1px;
-    }
 
     .charts-section {
       margin-top:18px;
@@ -219,35 +233,7 @@
       background:#f8f9fa;
       border-radius:15px;
     }
-    .charts-section h3 { color:#667eea; margin-bottom:10px; }
-
-    .chart-controls {
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 12px;
-      box-shadow:0 2px 10px rgba(0,0,0,0.08);
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-      align-items: center;
-    }
-    .toggle-row {
-      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
-    }
-    .toggle {
-      display:flex; align-items:center; gap:8px;
-      background:#f4f6ff;
-      border:1px solid #e5e7ff;
-      padding:8px 10px;
-      border-radius:999px;
-      font-size:13px;
-      font-weight:800;
-      color:#333;
-    }
-    .toggle input { width:auto; padding:0; border:none; }
-    .small { font-size:12px; color:#666; line-height:1.35; }
-
+    .charts-section h3 { color:#667eea; margin-bottom:12px; }
     .chart-container {
       background:white;
       padding:14px;
@@ -255,8 +241,7 @@
       margin-bottom:12px;
       box-shadow:0 2px 10px rgba(0,0,0,0.08);
     }
-    /* IMPORTANT: fixed height so Chart.js always draws */
-    .chart-container canvas { height: 320px !important; width: 100% !important; }
+    .chart-container canvas { max-height: 320px; }
 
     .tiny { font-size:12px; color:#666; margin-top:10px; line-height:1.35; }
     .row-note { margin-top:8px; font-size:12px; color:#666; }
@@ -280,6 +265,7 @@
       gap: 10px;
       align-items: center;
     }
+    input[type="range"] { width: 100%; }
     .vc-buttons {
       display: flex;
       gap: 10px;
@@ -313,14 +299,23 @@
       outline: none;
       width: 100%;
     }
+
+    .footer {
+      margin-top: 14px;
+      text-align:center;
+      font-size: 12px;
+      color:#777;
+    }
   </style>
 </head>
 
 <body>
 <div class="container">
   <h1>🏃 Gait Biodynamics Lab</h1>
-  <p class="subtitle">Camera (set 120fps) + Upload High-FPS Video (e.g., 240fps) • Seek + Frame-step • Per-step curves • Live smoothing</p>
-  <div class="copyright">© <span id="yearNow"></span> Ng Jun Wei. All rights reserved.</div>
+  <p class="subtitle">
+    Camera (set 120fps) + Upload High-FPS Video (e.g., 240fps) • Seek + Frame-step • Per-step GRF-time proxy curves •
+    Application is developed by Ng Jun Wei
+  </p>
 
   <div id="status" class="status loading"><span class="loading-spinner"></span> Initializing…</div>
 
@@ -341,7 +336,7 @@
           <option value="male">Male</option>
           <option value="female">Female</option>
         </select>
-        <div class="hint">Thresholds are sex-specific (gentle tuning).</div>
+        <div class="hint">Thresholds adapt based on sex.</div>
       </div>
       <div>
         <label>Age (years)</label>
@@ -354,11 +349,11 @@
       <div>
         <label>Height (cm)</label>
         <input type="number" id="subjectHeight" min="100" max="250" step="0.1" value="170">
-        <div class="hint">Used to calibrate spatial metrics (cm) from pixels.</div>
+        <div class="hint">Used to calibrate px→cm for stride/VO.</div>
       </div>
     </div>
     <div class="tiny">
-      Tip: true 240fps is best via uploaded slow-mo video. Browser decoding may deliver fewer frames; use seek + frame-step for precise review.
+      Tip: true 240fps is best via uploaded slow-mo video. Browser decoding may deliver fewer frames on some devices, but the seek + frame-step helps review precisely.
     </div>
   </div>
 
@@ -393,7 +388,7 @@
             <div>
               <label>Assumed Video FPS (for frame-step)</label>
               <input id="assumedFps" type="number" min="10" max="1000" step="1" value="240">
-              <div class="hint">Only affects ±1-frame stepping (not detection).</div>
+              <div class="hint">If your video is 120fps “normal”, set to 120. This only affects ±1-frame stepping.</div>
             </div>
             <div>
               <label>Frame Step Size</label>
@@ -402,7 +397,7 @@
                 <option value="2">±2 frames</option>
                 <option value="5">±5 frames</option>
               </select>
-              <div class="hint">Use larger steps if your device lags.</div>
+              <div class="hint">Use larger steps if your device lags during scrubbing.</div>
             </div>
           </div>
 
@@ -466,7 +461,7 @@
           <div class="metric-value" id="kneeMSR">0<span class="metric-unit">°</span></div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Pelvic Tilt (Lateral) - last</div>
+          <div class="metric-label">Pelvic Tilt (Lateral) - live</div>
           <div class="metric-value" id="pelvicTilt">0<span class="metric-unit">°</span></div>
         </div>
         <div class="metric-card">
@@ -489,48 +484,35 @@
 
       <div style="margin-top:12px;">
         <div class="metric-label">Detected Issues (per-step)</div>
-        <div class="issues-list" id="issuesList">
-          <div style="text-align:center; color:#999; padding:18px;">No issues detected yet</div>
+
+        <div class="issues-wrap">
+          <div class="issues-head">
+            <div class="mono">Archetype Labels</div>
+            <button id="toggleIssuesBtn" style="min-width:140px; flex:0; padding:10px 12px; font-size:12px; background:#2c3e50; color:#fff; border-radius:10px;">
+              Collapse
+            </button>
+          </div>
+
+          <div class="tagrow" id="archetypeBadges">
+            <div class="tag" id="tagOverstrider"><span class="dot"></span>Overstrider</div>
+            <div class="tag" id="tagBouncer"><span class="dot"></span>Bouncer</div>
+            <div class="tag" id="tagCollapser"><span class="dot"></span>Collapser</div>
+          </div>
+
+          <div class="issues-list" id="issuesList">
+            <div style="text-align:center; color:#999; padding:18px;">No issues detected yet</div>
+          </div>
         </div>
       </div>
 
       <div class="tiny">
-        Labels: <b>Overstrider</b> (excess overstride), <b>Bouncer</b> (excess VO), <b>Collapser</b> (excess lateral pelvic tilt).
-        Thresholds are sex-specific and heuristic (screening only).
+        GRF proxy curve uses ankle vertical deceleration during stance (normalized to BW proxy). It’s not a true force plate.
       </div>
     </div>
   </div>
 
   <div class="charts-section">
-    <h3>📊 Charts</h3>
-
-    <div class="chart-controls">
-      <div>
-        <label>Chart smoothing (low-pass)</label>
-        <input id="smoothAlpha" type="range" min="0.05" max="0.6" step="0.05" value="0.25">
-        <div class="small">Lower = smoother (more lag). Higher = more responsive.</div>
-      </div>
-
-      <div>
-        <label>GRF curve smoothing window</label>
-        <select id="grfWindow">
-          <option value="1">None</option>
-          <option value="3">3-pt</option>
-          <option value="5" selected>5-pt</option>
-          <option value="7">7-pt</option>
-          <option value="9">9-pt</option>
-        </select>
-        <div class="small">Moving average for the selected step’s GRF proxy curve.</div>
-      </div>
-
-      <div class="toggle-row">
-        <div class="toggle"><input id="showRaw" type="checkbox"> Show raw (faint)</div>
-        <div class="toggle"><input id="autoscaleY" type="checkbox" checked> Auto-scale Y axes</div>
-      </div>
-      <div class="small">
-        Tip: If you see “flat” lines, turn off smoothing or enable Auto-scale.
-      </div>
-    </div>
+    <h3>📊 Charts (low-pass filtered)</h3>
 
     <div class="chart-container">
       <canvas id="strideChart"></canvas>
@@ -552,27 +534,20 @@
         </select>
       </div>
       <canvas id="grfCurveChart"></canvas>
-      <div class="tiny">Selected step’s stance GRF proxy curve (BW vs time from IC). Smoothed for readability.</div>
+      <div class="tiny">Shows the selected step’s stance GRF proxy curve (BW vs time from IC) with low-pass smoothing.</div>
     </div>
   </div>
+
+  <div class="footer">© 2025 Ng Jun Wei. All rights reserved.</div>
 </div>
 
 <script>
-/*!
- * Gait Biodynamics Lab
- * Copyright (c) 2025 Ng Jun Wei. All rights reserved.
- * Unauthorized copying, modification, distribution, or use of this code, in whole or in part,
- * without explicit permission from Ng Jun Wei is prohibited.
- */
-
   // ============================================================
   // Environment
   // ============================================================
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
   const useVFC = typeof HTMLVideoElement !== 'undefined' && 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
-
-  document.getElementById('yearNow').textContent = String(new Date().getFullYear());
 
   // ============================================================
   // DOM
@@ -587,6 +562,13 @@
   const recordBtn = document.getElementById('recordBtn');
   const exportBtn = document.getElementById('exportBtn');
   const snapshotBtn = document.getElementById('snapshotBtn');
+
+  const toggleIssuesBtn = document.getElementById('toggleIssuesBtn');
+  const issuesList = document.getElementById('issuesList');
+  const archetypeBadges = document.getElementById('archetypeBadges');
+  const tagOverstrider = document.getElementById('tagOverstrider');
+  const tagBouncer = document.getElementById('tagBouncer');
+  const tagCollapser = document.getElementById('tagCollapser');
 
   const videoFile = document.getElementById('videoFile');
   const webcam = document.getElementById('webcam');
@@ -620,11 +602,55 @@
   // GRF curve selector
   const stepPicker = document.getElementById('stepPicker');
 
-  // Chart controls
-  const smoothAlphaEl = document.getElementById('smoothAlpha');
-  const showRawEl = document.getElementById('showRaw');
-  const autoscaleYEl = document.getElementById('autoscaleY');
-  const grfWindowEl = document.getElementById('grfWindow');
+  // ============================================================
+  // Thresholds (sex-specific)
+  // ============================================================
+  const TH = {
+    male: {
+      pelvicTiltWarn: 8,
+      pelvicTiltCrit: 12,
+      voWarnCm: 10,
+      voCritCm: 13,
+      overModerate: 0.20,
+      overHigh: 0.30
+    },
+    female: {
+      pelvicTiltWarn: 10,
+      pelvicTiltCrit: 14,
+      voWarnCm: 11,
+      voCritCm: 14,
+      overModerate: 0.18,
+      overHigh: 0.28
+    }
+  };
+
+  // ============================================================
+  // Low-pass (EMA)
+  // ============================================================
+  function emaFilter(values, alpha = 0.28) {
+    // alpha: higher = less smoothing; lower = more smoothing
+    const out = [];
+    let y = null;
+    for (const v of values) {
+      if (typeof v !== 'number' || !isFinite(v)) { out.push(null); continue; }
+      if (y == null) y = v;
+      y = alpha * v + (1 - alpha) * y;
+      out.push(y);
+    }
+    return out;
+  }
+
+  const liveLP = {
+    pelvic: null,
+    vo: null,
+    drift: null
+  };
+  function lpLive(key, v, alpha = 0.22) {
+    if (typeof v !== 'number' || !isFinite(v)) return 0;
+    if (liveLP[key] == null) liveLP[key] = v;
+    liveLP[key] = alpha * v + (1 - alpha) * liveLP[key];
+    return liveLP[key];
+  }
 
   // ============================================================
   // State
@@ -644,99 +670,12 @@
   let loopFrames = 0;
   let loopFpsT0 = 0;
 
-  // ============================================================
-  // Sex-specific thresholds (heuristic)
-  // ============================================================
-  function thresholds() {
-    const sex = subjectSexEl.value;
-    // NOTE: These are screening heuristics. Tune based on your population and camera setup.
-    if (sex === 'female') {
-      return {
-        pelvicWarn: 8.5,
-        pelvicCrit: 11.5,
-        voWarn: 10.5,
-        voCrit: 13.0,
-        overModerate: 0.20,
-        overHigh: 0.30
-      };
-    }
-    // male default
-    return {
-      pelvicWarn: 8.0,
-      pelvicCrit: 11.0,
-      voWarn: 10.0,
-      voCrit: 12.5,
-      overModerate: 0.20,
-      overHigh: 0.30
-    };
-  }
-
-  // ============================================================
-  // Height-based spatial calibration (px -> cm)
-  // We estimate body height in pixels using nose-to-lowest-ankle and smooth it over time.
-  // ============================================================
-  const scaleCal = {
-    pxToCm: null,
-    emaAlpha: 0.08 // slow smooth so it doesn't jitter
+  // Archetype flags
+  const archetypes = {
+    overstrider: false,
+    bouncer: false,
+    collapser: false
   };
-
-  function updatePxToCm(nose, ankleL, ankleR, heightCm) {
-    const est = estimatePxToCm(nose, ankleL, ankleR, heightCm);
-    if (est == null) return scaleCal.pxToCm;
-    if (scaleCal.pxToCm == null) scaleCal.pxToCm = est;
-    else scaleCal.pxToCm = scaleCal.emaAlpha * est + (1 - scaleCal.emaAlpha) * scaleCal.pxToCm;
-    return scaleCal.pxToCm;
-  }
-
-  // ============================================================
-  // Low-pass filtering (charts)
-  // ============================================================
-  const CHART_SMOOTH = {
-    stepsEmaAlpha: Number(smoothAlphaEl.value || 0.25),
-    grfMovingAvgWindow: Number(grfWindowEl.value || 5)
-  };
-
-  function emaSeries(values, alpha) {
-    let y = null;
-    const out = new Array(values.length);
-    for (let i = 0; i < values.length; i++) {
-      const x = values[i];
-      if (typeof x !== 'number' || !isFinite(x)) {
-        out[i] = null;       // keep visual gaps
-        continue;            // but keep y for the next valid sample
-      }
-      if (y == null) y = x;
-      else y = alpha * x + (1 - alpha) * y;
-      out[i] = y;
-    }
-    return out;
-  }
-
-  function movingAverage(values, windowSize) {
-    const w = Math.max(1, Math.floor(windowSize));
-    if (w === 1) return values.slice();
-    const out = new Array(values.length).fill(null);
-    const half = Math.floor(w / 2);
-    for (let i = 0; i < values.length; i++) {
-      let sum = 0, count = 0;
-      for (let k = i - half; k <= i + half; k++) {
-        const v = values[k];
-        if (typeof v === 'number' && isFinite(v)) { sum += v; count++; }
-      }
-      out[i] = count ? (sum / count) : null;
-    }
-    return out;
-  }
-
-  function quantile(arr, q) {
-    const xs = arr.filter(v => typeof v === 'number' && isFinite(v)).slice().sort((a,b)=>a-b);
-    if (!xs.length) return null;
-    const pos = (xs.length - 1) * q;
-    const base = Math.floor(pos);
-    const rest = pos - base;
-    if (xs[base+1] !== undefined) return xs[base] + rest * (xs[base+1] - xs[base]);
-    return xs[base];
-  }
 
   // ============================================================
   // Per-step gait state (concurrent L/R)
@@ -751,7 +690,8 @@
       active: null,
       lastTO: null,
       lastIC: null,
-      lastIC_hipX: null
+      lastIC_hipX: null,
+      lastIC_overRatio: null
     };
   }
 
@@ -764,41 +704,38 @@
   };
 
   let detectedIssues = new Set();
+  let issuesCollapsed = false;
 
   // ============================================================
   // Charts
   // ============================================================
   let strideChart, stanceChart, kneeMSChart, grfCurveChart;
 
-  function makeChartOptions(xTitle, yTitle) {
+  function chartDefaults(titleX, titleY) {
     return {
       responsive: true,
-      maintainAspectRatio: false,
+      maintainAspectRatio: true,
       animation: false,
-      normalized: true,
-      parsing: false,
-      interaction: { mode: 'nearest', intersect: false },
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: true, labels: { boxWidth: 12, boxHeight: 12 } },
-        tooltip: {
-          enabled: true,
-          callbacks: {
-            label: (ctx) => {
-              const v = ctx.raw;
-              if (v == null) return `${ctx.dataset.label}: —`;
-              const suffix = yTitle.includes('cm') ? ' cm' : yTitle.includes('seconds') ? ' s' : yTitle.includes('degrees') ? ' °' : '';
-              return `${ctx.dataset.label}: ${Number(v).toFixed(2)}${suffix}`;
-            }
-          }
-        }
+        legend: { display: true, labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true } },
+        tooltip: { enabled: true }
       },
       elements: {
-        line: { borderWidth: 3, tension: 0.35 },
-        point: { radius: 0, hoverRadius: 4, hitRadius: 10 }
+        point: { radius: 2, hoverRadius: 4 },
+        line: { borderWidth: 2 }
       },
       scales: {
-        x: { title: { display: true, text: xTitle }, grid: { drawBorder: false } },
-        y: { title: { display: true, text: yTitle }, grid: { drawBorder: false } }
+        x: {
+          title: { display: true, text: titleX },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { maxTicksLimit: 10 }
+        },
+        y: {
+          title: { display: true, text: titleY },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { maxTicksLimit: 8 }
+        }
       }
     };
   }
@@ -806,14 +743,14 @@
   function initCharts() {
     strideChart = new Chart(document.getElementById('strideChart'), {
       type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          { label: 'Stride Length (cm) — filtered', data: [], borderColor: '#667eea', spanGaps: true },
-          { label: 'Stride Length (cm) — raw',      data: [], borderColor: '#667eea55', spanGaps: true, hidden: true, borderWidth: 2 }
-        ]
-      },
-      options: makeChartOptions('Step #', 'cm')
+      data: { labels: [], datasets: [{ label: 'Stride Length (cm) — LP', data: [], tension: 0.35 }] },
+      options: {
+        ...chartDefaults('Step #', 'cm'),
+        scales: {
+          ...chartDefaults('Step #','cm').scales,
+          y: { ...chartDefaults('Step #','cm').scales.y, suggestedMin: 50, suggestedMax: 200 }
+        }
+      }
     });
 
     stanceChart = new Chart(document.getElementById('stanceChart'), {
@@ -821,13 +758,17 @@
       data: {
         labels: [],
         datasets: [
-          { label: 'Stance Time (s) — filtered', data: [], borderColor: '#2ecc71', spanGaps: true },
-          { label: 'Swing Time (s) — filtered',  data: [], borderColor: '#f39c12', spanGaps: true },
-          { label: 'Stance Time (s) — raw',      data: [], borderColor: '#2ecc7155', spanGaps: true, hidden: true, borderWidth: 2 },
-          { label: 'Swing Time (s) — raw',       data: [], borderColor: '#f39c1255', spanGaps: true, hidden: true, borderWidth: 2 }
+          { label: 'Stance Time (s) — LP', data: [], tension: 0.35 },
+          { label: 'Swing Time (s) — LP', data: [], tension: 0.35 }
         ]
       },
-      options: makeChartOptions('Step #', 'seconds')
+      options: {
+        ...chartDefaults('Step #', 'seconds'),
+        scales: {
+          ...chartDefaults('Step #','seconds').scales,
+          y: { ...chartDefaults('Step #','seconds').scales.y, suggestedMin: 0.1, suggestedMax: 0.9 }
+        }
+      }
     });
 
     kneeMSChart = new Chart(document.getElementById('kneeMSChart'), {
@@ -835,98 +776,71 @@
       data: {
         labels: [],
         datasets: [
-          { label: 'Knee Mid-Stance L (°) — filtered', data: [], borderColor: '#3498db', spanGaps: true },
-          { label: 'Knee Mid-Stance R (°) — filtered', data: [], borderColor: '#9b59b6', spanGaps: true },
-          { label: 'Knee Mid-Stance L (°) — raw',      data: [], borderColor: '#3498db55', spanGaps: true, hidden: true, borderWidth: 2 },
-          { label: 'Knee Mid-Stance R (°) — raw',      data: [], borderColor: '#9b59b655', spanGaps: true, hidden: true, borderWidth: 2 }
+          { label: 'Knee Flexion Mid-Stance L (°) — LP', data: [], tension: 0.35 },
+          { label: 'Knee Flexion Mid-Stance R (°) — LP', data: [], tension: 0.35 }
         ]
       },
-      options: makeChartOptions('Step #', 'degrees')
+      options: {
+        ...chartDefaults('Step #', 'degrees'),
+        scales: {
+          ...chartDefaults('Step #','degrees').scales,
+          y: { ...chartDefaults('Step #','degrees').scales.y, suggestedMin: 90, suggestedMax: 180 }
+        }
+      }
     });
 
     grfCurveChart = new Chart(document.getElementById('grfCurveChart'), {
       type: 'line',
       data: {
         labels: [],
-        datasets: [
-          { label: 'GRF Proxy (BW) — filtered', data: [], borderColor: '#e74c3c', spanGaps: true },
-          { label: 'GRF Proxy (BW) — raw',      data: [], borderColor: '#e74c3c55', spanGaps: true, hidden: true, borderWidth: 2 }
-        ]
+        datasets: [{
+          label: 'GRF Proxy (BW) vs time from IC — LP',
+          data: [],
+          tension: 0.25
+        }]
       },
-      options: makeChartOptions('ms from IC', 'BW (proxy)')
+      options: {
+        ...chartDefaults('ms from IC', 'BW (proxy)'),
+        scales: {
+          x: { ...chartDefaults('ms from IC','BW').scales.x, title: { display: true, text: 'ms from IC' } },
+          y: { ...chartDefaults('ms from IC','BW').scales.y, title: { display: true, text: 'BW (proxy)' }, suggestedMin: 1.0, suggestedMax: 3.2 }
+        }
+      }
     });
   }
 
-  function numOrNull(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
-
-  function autoscaleYAxis(chart, values, padFrac=0.15) {
-    if (!chart) return;
-    if (!autoscaleYEl.checked) {
-      // reset to auto
-      chart.options.scales.y.min = undefined;
-      chart.options.scales.y.max = undefined;
-      return;
-    }
-    const lo = quantile(values, 0.10);
-    const hi = quantile(values, 0.90);
-    if (lo == null || hi == null) {
-      chart.options.scales.y.min = undefined;
-      chart.options.scales.y.max = undefined;
-      return;
-    }
-    const span = Math.max(1e-6, hi - lo);
-    chart.options.scales.y.min = lo - span * padFrac;
-    chart.options.scales.y.max = hi + span * padFrac;
+  function numOrNull(v) {
+    return (typeof v === 'number' && isFinite(v)) ? v : null;
   }
 
   function updateChartsFromSteps() {
-    CHART_SMOOTH.stepsEmaAlpha = Number(smoothAlphaEl.value || 0.25);
-
     const steps = gait.steps;
     const maxPoints = 90;
     const start = Math.max(0, steps.length - maxPoints);
     const slice = steps.slice(start);
     const labels = slice.map(s => String(s.idx));
 
+    // stride
     const strideRaw = slice.map(s => numOrNull(s.strideCm));
-    const stanceRaw = slice.map(s => numOrNull(s.stanceTimeS));
-    const swingRaw  = slice.map(s => numOrNull(s.swingTimeS));
-
-    const kneeLRaw = slice.map(s => (s.side === 'L') ? numOrNull(s.kneeMidStanceDeg) : null);
-    const kneeRRaw = slice.map(s => (s.side === 'R') ? numOrNull(s.kneeMidStanceDeg) : null);
-
-    const a = CHART_SMOOTH.stepsEmaAlpha;
-    const strideSm = emaSeries(strideRaw, a);
-    const stanceSm = emaSeries(stanceRaw, a);
-    const swingSm  = emaSeries(swingRaw,  a);
-    const kneeLSm  = emaSeries(kneeLRaw,  a);
-    const kneeRSm  = emaSeries(kneeRRaw,  a);
-
+    const strideLP = emaFilter(strideRaw, 0.30);
     strideChart.data.labels = labels;
-    strideChart.data.datasets[0].data = strideSm;
-    strideChart.data.datasets[1].data = strideRaw;
-    strideChart.data.datasets[1].hidden = !showRawEl.checked;
-    autoscaleYAxis(strideChart, strideSm.filter(v=>v!=null));
+    strideChart.data.datasets[0].data = strideLP;
     strideChart.update('none');
 
+    // stance/swing
+    const stanceRaw = slice.map(s => numOrNull(s.stanceTimeS));
+    const swingRaw  = slice.map(s => numOrNull(s.swingTimeS));
     stanceChart.data.labels = labels;
-    stanceChart.data.datasets[0].data = stanceSm;
-    stanceChart.data.datasets[1].data = swingSm;
-    stanceChart.data.datasets[2].data = stanceRaw;
-    stanceChart.data.datasets[3].data = swingRaw;
-    stanceChart.data.datasets[2].hidden = !showRawEl.checked;
-    stanceChart.data.datasets[3].hidden = !showRawEl.checked;
-    autoscaleYAxis(stanceChart, stanceSm.concat(swingSm).filter(v=>v!=null));
+    stanceChart.data.datasets[0].data = emaFilter(stanceRaw, 0.30);
+    stanceChart.data.datasets[1].data = emaFilter(swingRaw, 0.30);
     stanceChart.update('none');
 
+    // knee mid-stance per side in the unified series
+    const kneeL = slice.map(s => (s.side === 'L') ? numOrNull(s.kneeMidStanceDeg) : null);
+    const kneeR = slice.map(s => (s.side === 'R') ? numOrNull(s.kneeMidStanceDeg) : null);
     kneeMSChart.data.labels = labels;
-    kneeMSChart.data.datasets[0].data = kneeLSm;
-    kneeMSChart.data.datasets[1].data = kneeRSm;
-    kneeMSChart.data.datasets[2].data = kneeLRaw;
-    kneeMSChart.data.datasets[3].data = kneeRRaw;
-    kneeMSChart.data.datasets[2].hidden = !showRawEl.checked;
-    kneeMSChart.data.datasets[3].hidden = !showRawEl.checked;
-    autoscaleYAxis(kneeMSChart, kneeLSm.concat(kneeRSm).filter(v=>v!=null));
+    kneeMSChart.data.datasets[0].data = emaFilter(kneeL, 0.35);
+    kneeMSChart.data.datasets[1].data = emaFilter(kneeR, 0.35);
     kneeMSChart.update('none');
 
     rebuildStepPicker();
@@ -935,6 +849,9 @@
   function rebuildStepPicker() {
     if (!gait.steps.length) {
       stepPicker.innerHTML = '<option value="">(no steps yet)</option>';
+      grfCurveChart.data.labels = [];
+      grfCurveChart.data.datasets[0].data = [];
+      grfCurveChart.update('none');
       return;
     }
     const current = stepPicker.value;
@@ -952,28 +869,22 @@
   }
 
   function renderSelectedGRFCurve() {
-    CHART_SMOOTH.grfMovingAvgWindow = Number(grfWindowEl.value || 5);
-
     const v = stepPicker.value;
     if (!v) return;
     const step = gait.steps.find(s => String(s.idx) === v);
     if (!step || !step.grfCurve || !step.grfCurve.length) {
       grfCurveChart.data.labels = [];
       grfCurveChart.data.datasets[0].data = [];
-      grfCurveChart.data.datasets[1].data = [];
       grfCurveChart.update('none');
       return;
     }
 
-    const xs = step.grfCurve.map(p => Math.round(p.tRelMs));
-    const ysRaw = step.grfCurve.map(p => (typeof p.bw === 'number' ? p.bw : null));
-    const ysSm = movingAverage(ysRaw, CHART_SMOOTH.grfMovingAvgWindow);
+    const labels = step.grfCurve.map(p => String(Math.round(p.tRelMs)));
+    const raw = step.grfCurve.map(p => (typeof p.bw === 'number' ? p.bw : null));
+    const lp = emaFilter(raw, 0.25);
 
-    grfCurveChart.data.labels = xs.map(String);
-    grfCurveChart.data.datasets[0].data = ysSm;
-    grfCurveChart.data.datasets[1].data = ysRaw;
-    grfCurveChart.data.datasets[1].hidden = !showRawEl.checked;
-    autoscaleYAxis(grfCurveChart, ysSm.filter(v=>v!=null));
+    grfCurveChart.data.labels = labels;
+    grfCurveChart.data.datasets[0].data = lp;
     grfCurveChart.update('none');
   }
 
@@ -1006,7 +917,12 @@
     const label = mode.toUpperCase();
     sourcePill.textContent = label;
     sourcePill.style.background = (mode === 'camera') ? '#16a085' : (mode === 'video') ? '#f39c12' : '#2c3e50';
-    sourceNote.textContent = (mode === 'camera') ? 'Source: camera stream' : (mode === 'video') ? 'Source: uploaded video file' : 'Source: none';
+    sourceNote.textContent = (mode === 'camera')
+      ? 'Source: camera stream'
+      : (mode === 'video')
+        ? 'Source: uploaded video file'
+        : 'Source: none';
+
     videoControlsPanel.style.display = (mode === 'video') ? 'block' : 'none';
   }
 
@@ -1022,6 +938,12 @@
     recordBtn.textContent = isRecording ? 'Stop Recording' : 'Start Recording';
   }
 
+  function syncArchetypeUI() {
+    tagOverstrider.classList.toggle('on', !!archetypes.overstrider);
+    tagBouncer.classList.toggle('on', !!archetypes.bouncer);
+    tagCollapser.classList.toggle('on', !!archetypes.collapser);
+  }
+
   // ============================================================
   // Reset state
   // ============================================================
@@ -1032,10 +954,18 @@
     gait.icTimes = [];
     gait.vo = { baselineY: null, maxDevPx: 0, windowFrames: 0, lastVOcm: 0 };
     detectedIssues = new Set();
-    scaleCal.pxToCm = null;
 
-    document.getElementById('issuesList').innerHTML =
-      '<div style="text-align:center; color:#999; padding:18px;">No issues detected yet</div>';
+    // reset archetypes
+    archetypes.overstrider = false;
+    archetypes.bouncer = false;
+    archetypes.collapser = false;
+    syncArchetypeUI();
+
+    liveLP.pelvic = null;
+    liveLP.vo = null;
+    liveLP.drift = null;
+
+    issuesList.innerHTML = '<div style="text-align:center; color:#999; padding:18px;">No issues detected yet</div>';
 
     document.getElementById('cadence').innerHTML = `0<span class="metric-unit">steps/min</span>`;
     document.getElementById('stanceTime').innerHTML = `0<span class="metric-unit">s</span>`;
@@ -1052,10 +982,11 @@
 
     exportBtn.disabled = true;
 
-    if (strideChart) { strideChart.data.labels = []; strideChart.data.datasets.forEach(d=>d.data=[]); strideChart.update('none'); }
-    if (stanceChart) { stanceChart.data.labels = []; stanceChart.data.datasets.forEach(d=>d.data=[]); stanceChart.update('none'); }
-    if (kneeMSChart) { kneeMSChart.data.labels = []; kneeMSChart.data.datasets.forEach(d=>d.data=[]); kneeMSChart.update('none'); }
-    if (grfCurveChart) { grfCurveChart.data.labels = []; grfCurveChart.data.datasets.forEach(d=>d.data=[]); grfCurveChart.update('none'); }
+    if (strideChart) { strideChart.data.labels = []; strideChart.data.datasets[0].data = []; strideChart.update('none'); }
+    if (stanceChart) { stanceChart.data.labels = []; stanceChart.data.datasets[0].data = []; stanceChart.data.datasets[1].data = []; stanceChart.update('none'); }
+    if (kneeMSChart) { kneeMSChart.data.labels = []; kneeMSChart.data.datasets[0].data = []; kneeMSChart.data.datasets[1].data = []; kneeMSChart.update('none'); }
+    if (grfCurveChart) { grfCurveChart.data.labels = []; grfCurveChart.data.datasets[0].data = []; grfCurveChart.update('none'); }
+
     rebuildStepPicker();
   }
 
@@ -1097,6 +1028,8 @@
     initCharts();
     syncModeUI();
     setSourceUI('none');
+    syncRecordButtonUI();
+
     setStatus('ready', `✓ Model Ready (backend: ${backend}) — Choose Camera or Upload Video`);
     startCamBtn.disabled = false;
     loadVideoBtn.disabled = false;
@@ -1133,10 +1066,59 @@
     webcam.load();
   }
 
-  function stopAll() {
-    // hard stop recording state + UI
-    isRecording = false;
+  // ============================================================
+  // Recording (robust start/stop)
+  // ============================================================
+  function startRecording() {
+    if (isRecording) return;
+    isRecording = true;
+
+    // Clear once at start (do NOT clear on stop)
+    resetGaitAll();
+
+    exportBtn.disabled = true;
+    setStatus('ready', '🔴 Recording per-step metrics…');
     syncRecordButtonUI();
+  }
+
+  function stopRecording() {
+    if (!isRecording) return;
+    isRecording = false;
+
+    // Finalize any active steps as partial (so stopping mid-stance doesn't "lose" it)
+    for (const side of ['L','R']) {
+      const f = gait.feet[side];
+      if (f.active && f.active.inStance) {
+        const tStop = performance.now();
+        f.active.tTO_ms = f.active.tTO_ms ?? tStop;
+        f.active.inStance = false;
+        f.active.stanceTimeS = (f.active.tTO_ms - f.active.tIC_ms) / 1000;
+        f.active.kneeMidStanceDeg = computeKneeMidStance(f.active.samples, f.active.tIC_ms, f.active.tTO_ms);
+        f.active.grfPeakBW = mapDecelProxyToBW(f.active.grfProxy.peak);
+        f.active.notes = (f.active.notes || '') + 'Partial step (stopped mid-stance). ';
+        updateLastStepCards(f.active);
+        finalizeStep(f.active);
+        f.active = null;
+      }
+    }
+
+    exportBtn.disabled = gait.steps.length === 0;
+    setStatus('ready', `✓ Recording stopped — ${gait.steps.length} steps captured`);
+    syncRecordButtonUI();
+
+    // Ensure charts show (fix "missing graphs")
+    updateChartsFromSteps();
+    renderSelectedGRFCurve();
+  }
+
+  function toggleRecording() {
+    if (isRecording) stopRecording();
+    else startRecording();
+  }
+
+  function stopAll() {
+    // Force recording OFF first (so button never lies)
+    stopRecording();
 
     stopLoops();
     stopStream();
@@ -1219,6 +1201,7 @@
       loopFrames = 0;
       loopFpsT0 = performance.now();
       loopPose(performance.now());
+
     } catch (e) {
       setSourceUI('none');
       setStatus('error', '✗ Camera Error: ' + (e?.message || e));
@@ -1268,8 +1251,9 @@
       skipBackBtn.disabled = false;
       skipFwdBtn.disabled = false;
 
-      playPauseBtn.textContent = 'Play';
       syncRecordButtonUI();
+
+      playPauseBtn.textContent = 'Play';
 
       updateSeekUI();
       videoMetaLabel.textContent = `Video: ${webcam.videoWidth}x${webcam.videoHeight}, duration ${formatTime(webcam.duration)} (s), VFC: ${useVFC ? 'yes' : 'no'}`;
@@ -1277,6 +1261,7 @@
       setStatus('ready', '📼 Video loaded. Press Play, or scrub using the seek bar / frame-step.');
       isRunning = false;
       fpsDisplay.textContent = 'FPS: 0';
+
     } catch (e) {
       setSourceUI('none');
       setStatus('error', '✗ Video Error: ' + (e?.message || e));
@@ -1409,8 +1394,8 @@
       mass: parseFloat(subjectMassEl.value || '0'),
       height: parseFloat(subjectHeightEl.value || '0')
     };
+    const th = TH[subject.sex] || TH.male;
 
-    const thr = thresholds();
     const m = viewMode();
     const get = (i) => (kps[i] && kps[i].score > 0.3) ? kps[i] : null;
 
@@ -1421,56 +1406,74 @@
 
     if (!ankleL && !ankleR) return;
 
-    // height-based calibration (smoothed)
-    const pxToCm = updatePxToCm(nose, ankleL, ankleR, subject.height);
+    // Height-based calibration: px->cm
+    const pxToCm = estimatePxToCm(nose, ankleL, ankleR, subject.height);
 
-    // Pelvic tilt (lateral)
-    const pelvicTiltDeg = computePelvicTiltDeg(hipL, hipR);
+    // Pelvic tilt (live, smoothed)
+    const pelvicTiltRaw = computePelvicTiltDeg(hipL, hipR);
+    const pelvicTiltDeg = lpLive('pelvic', pelvicTiltRaw, 0.22);
     document.getElementById('pelvicTilt').innerHTML = `${pelvicTiltDeg.toFixed(1)}<span class="metric-unit">°</span>`;
 
-    if (pelvicTiltDeg >= thr.pelvicCrit) addIssueTagged('critical', 'Collapser', 'Excess lateral pelvic tilt');
-    else if (pelvicTiltDeg >= thr.pelvicWarn) addIssueTagged('warning', 'Collapser', 'Elevated lateral pelvic tilt');
+    if (pelvicTiltDeg > th.pelvicTiltCrit) {
+      addIssue('critical', `Pelvic tilt very high (${pelvicTiltDeg.toFixed(1)}°)`);
+      archetypes.collapser = true;
+    } else if (pelvicTiltDeg > th.pelvicTiltWarn) {
+      addIssue('warning', `Pelvic tilt elevated (${pelvicTiltDeg.toFixed(1)}°)`);
+      archetypes.collapser = true;
+    }
 
-    // VO (cm) from hip-mid baseline
+    // VO (live, smoothed) — requires pxToCm
     const hipMidY = midY(hipL, hipR);
     if (hipMidY != null && pxToCm) {
-      const voCm = updateVerticalOscillation(hipMidY, pxToCm);
+      const voCmRaw = updateVerticalOscillation(hipMidY, pxToCm);
+      const voCm = lpLive('vo', voCmRaw, 0.18);
       document.getElementById('vertOsc').innerHTML = `${voCm.toFixed(1)}<span class="metric-unit">cm</span>`;
-      if (voCm >= thr.voCrit) addIssueTagged('critical', 'Bouncer', 'Excess vertical oscillation');
-      else if (voCm >= thr.voWarn) addIssueTagged('warning', 'Bouncer', 'High vertical oscillation');
+
+      if (voCm > th.voCritCm) {
+        addIssue('critical', `Very high vertical oscillation (${voCm.toFixed(1)}cm)`);
+        archetypes.bouncer = true;
+      } else if (voCm > th.voWarnCm) {
+        addIssue('warning', `High vertical oscillation (${voCm.toFixed(1)}cm)`);
+        archetypes.bouncer = true;
+      }
     }
 
     // knee angles
     const kneeDegL = (hipL && kneeL && ankleL) ? calculateAngle(hipL, kneeL, ankleL) : null;
     const kneeDegR = (hipR && kneeR && ankleR) ? calculateAngle(hipR, kneeR, ankleR) : null;
 
-    // Frontal knee drift proxy
+    // Frontal knee drift proxy (smoothed)
     if (m === 'frontal') {
-      const drift = computeKneeMedialDriftProxyDeg(hipL, kneeL, ankleL, hipR, kneeR, ankleR);
+      const driftRaw = computeKneeMedialDriftProxyDeg(hipL, kneeL, ankleL, hipR, kneeR, ankleR);
+      const drift = lpLive('drift', driftRaw, 0.22);
       modeMetricValue.textContent = `${drift.toFixed(1)}°`;
     }
 
-    // feet processing
-    handleFoot('L', tNowMs, ankleL, hipL, hipR, kneeDegL, pelvicTiltDeg, pxToCm, m);
-    handleFoot('R', tNowMs, ankleR, hipL, hipR, kneeDegR, pelvicTiltDeg, pxToCm, m);
+    // feet step state machine
+    handleFoot('L', tNowMs, ankleL, hipL, hipR, kneeDegL, pelvicTiltDeg, pxToCm, m, subject.sex);
+    handleFoot('R', tNowMs, ankleR, hipL, hipR, kneeDegR, pelvicTiltDeg, pxToCm, m, subject.sex);
 
     updatePhaseUI(gait.feet.L.contact, gait.feet.R.contact);
     updateCadenceUI();
     updateRollingUI();
 
+    // update archetype badges
+    syncArchetypeUI();
+
     exportBtn.disabled = gait.steps.length === 0;
   }
 
-  function handleFoot(side, tNow, ankle, hipL, hipR, kneeDeg, pelvicTiltDeg, pxToCm, mode) {
+  function handleFoot(side, tNow, ankle, hipL, hipR, kneeDeg, pelvicTiltDeg, pxToCm, mode, sex) {
+    const th = TH[sex] || TH.male;
     const f = gait.feet[side];
     if (!ankle) return;
 
-    // ground baseline follows slowly
+    // ground baseline follows slowly to max y
     const alpha = 0.05;
     if (f.groundY == null) f.groundY = ankle.y;
     f.groundY = (1 - alpha) * f.groundY + alpha * Math.max(f.groundY, ankle.y);
 
-    // contact hysteresis
+    // hysteresis for contact
     const thrOn = 18, thrOff = 26;
     const dist = f.groundY - ankle.y;
 
@@ -1487,13 +1490,12 @@
     const ic = (!f.contact && contactNow && vY > -400);
     const to = (f.contact && !contactNow);
 
-    if (ic) onInitialContact(side, tNow, ankle, hipL, hipR, pxToCm, mode);
-
+    if (ic) onInitialContact(side, tNow, ankle, hipL, hipR, pxToCm, mode, sex);
     if (f.active && f.active.inStance) {
       if (typeof kneeDeg === 'number') f.active.samples.push({ t: tNow, kneeDeg });
       f.active.pelvicTiltMaxDeg = Math.max(f.active.pelvicTiltMaxDeg, pelvicTiltDeg);
 
-      // GRF curve: ankle vertical decel proxy
+      // GRF curve: store throughout stance (downsample)
       const decel = Math.max(0, -aY);
       const bw = mapDecelProxyToBW(decel);
       const tRelMs = tNow - f.active.tIC_ms;
@@ -1502,7 +1504,7 @@
         f.active.grfCurve.push({ tRelMs, bw });
       }
 
-      // Peak + TTP from early stance
+      // Peak + TTP from early stance window
       const earlyWindowMs = 140;
       if (tRelMs <= earlyWindowMs) {
         if (decel > f.active.grfProxy.peak) {
@@ -1512,16 +1514,16 @@
       }
     }
 
-    if (to) onToeOff(side, tNow);
+    if (to) onToeOff(side, tNow, sex);
 
     f.contact = contactNow;
     f.prev = { t: tNow, x: ankle.x, y: ankle.y, ok: true };
   }
 
-  function onInitialContact(side, tIC, ankle, hipL, hipR, pxToCm, mode) {
+  function onInitialContact(side, tIC, ankle, hipL, hipR, pxToCm, mode, sex) {
     if (!isRecording) return;
 
-    const thr = thresholds();
+    const th = TH[sex] || TH.male;
     const f = gait.feet[side];
 
     // debounce
@@ -1536,12 +1538,13 @@
       lastSame.swingTimeS = (tIC - lastSame.tTO_ms) / 1000;
     }
 
-    // stride proxy in cm (hip-mid displacement between same-side ICs)
+    // stride proxy from hip mid X between same-side ICs (needs pxToCm)
     if (pxToCm && f.lastIC_hipX != null && hipMidX != null) {
       const strideCm = Math.abs(hipMidX - f.lastIC_hipX) * pxToCm;
       if (lastSame && typeof lastSame.strideCm !== 'number') lastSame.strideCm = strideCm;
     }
 
+    // start active
     f.active = {
       side,
       tIC_ms: tIC,
@@ -1556,6 +1559,7 @@
       grfProxy: { peak: 0, tPeak: null },
       grfCurve: [],
       overstrideLevel: null,
+      overstrideRatio: null,
       landingQuality: null,
       grfPeakBW: null,
       grfTimeToPeakMs: null,
@@ -1563,11 +1567,18 @@
     };
 
     if (mode === 'sagittal') {
-      const over = computeOverstrideRisk(hipMidX, ankle, canvas.height || 1, thr);
+      const over = computeOverstrideRisk(hipMidX, ankle, canvas.height || 1, th);
       f.active.overstrideLevel = over.level;
+      f.active.overstrideRatio = over.ratio;
       modeMetricValue.textContent = over.level;
-      if (over.level === 'High') addIssueTagged('critical', 'Overstrider', `${side}: Excess overstride at IC`);
-      else if (over.level === 'Moderate') addIssueTagged('warning', 'Overstrider', `${side}: Moderate overstride at IC`);
+
+      if (over.level === 'High') {
+        addIssue('critical', `${side}: Overstriding at IC`);
+        archetypes.overstrider = true;
+      } else if (over.level === 'Moderate') {
+        addIssue('warning', `${side}: Moderate overstride at IC`);
+        archetypes.overstrider = true;
+      }
     }
 
     gait.icTimes.push(tIC);
@@ -1579,10 +1590,10 @@
     setPhaseIndicator(1);
   }
 
-  function onToeOff(side, tTO) {
+  function onToeOff(side, tTO, sex) {
     if (!isRecording) return;
 
-    const thr = thresholds();
+    const th = TH[sex] || TH.male;
     const f = gait.feet[side];
     if (!f.active || !f.active.inStance) return;
 
@@ -1600,20 +1611,21 @@
     f.active.grfPeakBW = grfBW;
     f.active.landingQuality = classifyLanding(grfBW, ttpMs);
 
-    // issues (extra)
+    // step-level issues
     if (typeof f.active.kneeMidStanceDeg === 'number' && f.active.kneeMidStanceDeg > 165) {
-      addIssueTagged('warning', 'Stiff-knee', `${side}: Low mid-stance knee flexion`);
+      addIssue('warning', `${side}: Low mid-stance knee flexion`);
       f.active.notes += 'Low mid-stance knee flexion; ';
     }
-    if (f.active.pelvicTiltMaxDeg >= thr.pelvicCrit) {
-      addIssueTagged('critical', 'Collapser', `${side}: Excess lateral pelvic tilt in stance`);
-      f.active.notes += 'Excess lateral pelvic tilt; ';
-    } else if (f.active.pelvicTiltMaxDeg >= thr.pelvicWarn) {
-      addIssueTagged('warning', 'Collapser', `${side}: Elevated lateral pelvic tilt in stance`);
-      f.active.notes += 'Elevated lateral pelvic tilt; ';
+    if (f.active.pelvicTiltMaxDeg > th.pelvicTiltWarn) {
+      addIssue('warning', `${side}: Pelvic tilt elevated in stance`);
+      f.active.notes += 'Pelvic tilt elevated; ';
+      archetypes.collapser = true;
+    }
+    if (f.active.overstrideLevel === 'High') {
+      archetypes.overstrider = true;
     }
     if (f.active.landingQuality === 'Hard') {
-      addIssueTagged('warning', 'Hard-lander', `${side}: Hard landing tendency (GRF proxy)`);
+      addIssue('warning', `${side}: Hard landing tendency (GRF proxy)`);
       f.active.notes += 'Hard landing tendency; ';
     }
 
@@ -1662,13 +1674,16 @@
       grfTimeToPeakMs: step.grfTimeToPeakMs,
       landingQuality: step.landingQuality,
       overstrideLevel: step.overstrideLevel,
+      overstrideRatio: step.overstrideRatio,
       grfCurve: step.grfCurve || [],
       notes: (step.notes || '').trim()
     };
     gait.steps.push(row);
 
-    // Update charts EVERY step so they never look empty
+    // ALWAYS update charts (fix "missing graphs")
     updateChartsFromSteps();
+
+    // select last step curve
     stepPicker.value = String(row.idx);
     renderSelectedGRFCurve();
   }
@@ -1696,7 +1711,6 @@
   function updateCadenceUI() {
     const t = gait.icTimes;
     if (t.length < 4) return;
-
     const lastN = 8;
     const slice = t.slice(-lastN);
 
@@ -1706,7 +1720,7 @@
     const cadence = avg > 0 ? Math.round(60 / avg) : 0;
 
     document.getElementById('cadence').innerHTML = `${cadence}<span class="metric-unit">steps/min</span>`;
-    if (cadence > 0 && cadence < 160) addIssueTagged('warning', 'Low-cadence', 'Low cadence — consider increasing step rate');
+    if (cadence > 0 && cadence < 160) addIssue('warning', 'Low cadence - consider increasing step rate');
   }
 
   function updateRollingUI() {
@@ -1776,8 +1790,8 @@
     const vals = [driftL, driftR].filter(v => typeof v === 'number');
     const max = vals.length ? Math.max(...vals) : 0;
 
-    if (max > 18) addIssueTagged('critical', 'Valgus', 'Frontal: High knee medial drift (valgus proxy)');
-    else if (max > 12) addIssueTagged('warning', 'Valgus', 'Frontal: Moderate knee medial drift (valgus proxy)');
+    if (max > 18) addIssue('critical', 'Frontal: High knee medial drift (valgus proxy)');
+    else if (max > 12) addIssue('warning', 'Frontal: Moderate knee medial drift (valgus proxy)');
 
     return max;
   }
@@ -1821,13 +1835,15 @@
     return null;
   }
 
-  function computeOverstrideRisk(hipMidX, ankle, bodyHeightPx, thr) {
+  function computeOverstrideRisk(hipMidX, ankle, bodyHeightPx, th) {
     if (hipMidX == null || !ankle) return { level: 'Low', ratio: 0 };
     const denom = Math.max(1, bodyHeightPx || 1);
     const ratio = Math.abs(ankle.x - hipMidX) / denom;
+
     let level = 'Low';
-    if (ratio > thr.overHigh) level = 'High';
-    else if (ratio > thr.overModerate) level = 'Moderate';
+    if (ratio > th.overHigh) level = 'High';
+    else if (ratio > th.overModerate) level = 'Moderate';
+
     return { level, ratio };
   }
 
@@ -1839,55 +1855,28 @@
   }
 
   // ============================================================
-  // Issues list with tags
+  // Issues list + archetype labels
   // ============================================================
-  function addIssueTagged(severity, tag, message) {
-    const key = `${severity}:${tag}:${message}`;
+  function addIssue(severity, message) {
+    const key = `${severity}:${message}`;
     if (detectedIssues.has(key)) return;
 
     detectedIssues.add(key);
-    const issuesList = document.getElementById('issuesList');
 
     if (detectedIssues.size === 1) issuesList.innerHTML = '';
 
     const div = document.createElement('div');
     div.className = 'issue-item ' + severity;
-
-    const badge = document.createElement('span');
-    badge.className = 'issue-tag';
-    badge.textContent = tag;
-
-    const text = document.createElement('span');
-    text.textContent = message;
-
-    div.appendChild(badge);
-    div.appendChild(text);
-
+    div.textContent = message;
     issuesList.insertBefore(div, issuesList.firstChild);
 
     while (issuesList.children.length > 7) issuesList.removeChild(issuesList.lastChild);
 
+    // auto-expire (so spam doesn’t lock list forever)
     setTimeout(() => detectedIssues.delete(key), 6500);
-  }
 
-  // ============================================================
-  // Recording
-  // ============================================================
-  function toggleRecording() {
-    isRecording = !isRecording;
-
-    if (isRecording) {
-      resetGaitAll();
-      exportBtn.disabled = true;
-      setStatus('ready', '🔴 Recording per-step metrics…');
-    } else {
-      exportBtn.disabled = gait.steps.length === 0;
-      setStatus('ready', `✓ Recording stopped — ${gait.steps.length} steps captured`);
-      updateChartsFromSteps();
-      renderSelectedGRFCurve();
-    }
-
-    syncRecordButtonUI();
+    // respect collapse
+    issuesList.style.display = issuesCollapsed ? 'none' : 'block';
   }
 
   // ============================================================
@@ -1936,7 +1925,6 @@
 
     const subjectSheetData = [
       ['Gait Biodynamics Lab - Per-Step Report'],
-      ['Copyright', `© ${new Date().getFullYear()} Ng Jun Wei. All rights reserved.`],
       ['Date', new Date().toLocaleString()],
       ['Source', sourceMode],
       ['View Mode', viewMode()],
@@ -1944,8 +1932,9 @@
       ['Age (years)', subject.age],
       ['Mass (kg)', subject.mass],
       ['Height (cm)', subject.height],
-      ['Calibration', `pxToCm (smoothed): ${scaleCal.pxToCm ? scaleCal.pxToCm.toFixed(4) : 'n/a'}`],
-      ['Notes', 'Knee mid-stance = knee angle near 50% stance. GRF proxy curve = BW proxy over stance from ankle vertical decel. VO from hip-mid baseline filtered.']
+      ['Archetype Labels', `Overstrider=${archetypes.overstrider ? 'Yes':'No'}, Bouncer=${archetypes.bouncer ? 'Yes':'No'}, Collapser=${archetypes.collapser ? 'Yes':'No'}`],
+      ['Notes', 'Knee mid-stance = knee angle near 50% stance. GRF proxy curve = BW proxy over stance from ankle vertical decel. Charts are low-pass filtered (EMA).'],
+      ['Copyright', '© 2025 Ng Jun Wei. All rights reserved.']
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(subjectSheetData), 'Subject');
 
@@ -1963,10 +1952,12 @@
       'GRF Time-to-Peak (ms, proxy)': (typeof s.grfTimeToPeakMs === 'number') ? Number(s.grfTimeToPeakMs.toFixed(0)) : '',
       'Landing Quality': s.landingQuality || '',
       'Overstride Level (sagittal)': s.overstrideLevel || '',
+      'Overstride Ratio': (typeof s.overstrideRatio === 'number') ? Number(s.overstrideRatio.toFixed(3)) : '',
       'Notes': s.notes || ''
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Steps');
 
+    // GRF curve sheet (long format)
     const curveRows = [];
     for (const s of gait.steps) {
       if (!s.grfCurve || !s.grfCurve.length) continue;
@@ -2042,7 +2033,6 @@
 
   function frameStep(deltaFrames) {
     if (sourceMode !== 'video') return;
-
     if (!webcam.paused) {
       webcam.pause();
       playPauseBtn.textContent = 'Play';
@@ -2055,12 +2045,15 @@
     const next = Math.min(dur || Infinity, Math.max(0, (webcam.currentTime || 0) + dt));
     webcam.currentTime = next;
     updateSeekUI();
+
+    // one tick on the new frame
+    isRunning = true;
     loopPose(webcam.currentTime * 1000);
+    isRunning = false;
   }
 
   function skipSeconds(ds) {
     if (sourceMode !== 'video') return;
-
     if (!webcam.paused) {
       webcam.pause();
       playPauseBtn.textContent = 'Play';
@@ -2070,7 +2063,10 @@
     const next = Math.min(dur || Infinity, Math.max(0, (webcam.currentTime || 0) + ds));
     webcam.currentTime = next;
     updateSeekUI();
+
+    isRunning = true;
     loopPose(webcam.currentTime * 1000);
+    isRunning = false;
   }
 
   // ============================================================
@@ -2094,6 +2090,7 @@
   snapshotBtn.addEventListener('click', exportSnapshotPNG);
 
   viewModeEl.addEventListener('change', syncModeUI);
+  subjectSexEl.addEventListener('change', () => { resetGaitAll(); });
 
   // Uploaded video controls bindings
   seekBar.addEventListener('input', () => { if (sourceMode === 'video') seekToBarValue(); });
@@ -2108,15 +2105,10 @@
 
   stepPicker.addEventListener('change', renderSelectedGRFCurve);
 
-  // Chart controls
-  smoothAlphaEl.addEventListener('input', () => { if (gait.steps.length) updateChartsFromSteps(); });
-  showRawEl.addEventListener('change', () => { if (gait.steps.length) { updateChartsFromSteps(); renderSelectedGRFCurve(); } });
-  autoscaleYEl.addEventListener('change', () => { if (gait.steps.length) { updateChartsFromSteps(); renderSelectedGRFCurve(); } });
-  grfWindowEl.addEventListener('change', () => renderSelectedGRFCurve());
-
-  // keep thresholds fresh when sex changes
-  subjectSexEl.addEventListener('change', () => {
-    // nothing to recalc immediately; next frames/steps will apply thresholds
+  toggleIssuesBtn.addEventListener('click', () => {
+    issuesCollapsed = !issuesCollapsed;
+    issuesList.style.display = issuesCollapsed ? 'none' : 'block';
+    toggleIssuesBtn.textContent = issuesCollapsed ? 'Expand' : 'Collapse';
   });
 
   // ============================================================
@@ -2132,8 +2124,6 @@
       exportBtn.disabled = true;
       snapshotBtn.disabled = true;
       playPauseBtn.disabled = true;
-
-      syncRecordButtonUI();
 
     } catch (e) {
       setStatus('error', '✗ Init Error: ' + (e?.message || e));
