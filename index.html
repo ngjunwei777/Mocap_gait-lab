@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Gait Biodynamics Lab</title>
+  <title>Gait Biodynamics Lab - Camera + High-FPS Video Upload</title>
+  <meta name="description" content="Step-based running gait analysis with MoveNet. Supports camera and high-FPS video upload, XLSX export, PNG snapshot, seek + frame-step, and GRF-time proxy curves.">
 
   <!--
     Gait Biodynamics Lab
@@ -40,7 +41,7 @@
     h1 { text-align:center; color:#667eea; margin-bottom:8px; font-size:2.1em; }
     .subtitle { text-align:center; color:#666; margin-bottom:12px; font-size: 13px; line-height:1.35; }
 
-    .status { padding:10px; border-radius:10px; margin-bottom:12px; text-align:center; font-weight:800; }
+    .status { padding:10px; border-radius:10px; margin-bottom:12px; text-align:center; font-weight:900; }
     .status.loading { background:#fff3cd; color:#856404; }
     .status.ready { background:#d4edda; color:#155724; }
     .status.error { background:#f8d7da; color:#721c24; }
@@ -57,21 +58,12 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .mini-btns {
-      display:flex; gap:10px; justify-content:center; flex-wrap:wrap;
-      margin-top:10px;
-    }
+    .mini-btns { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
     .mini-btns button{
-      padding:10px 12px;
-      border:none;
-      border-radius:10px;
-      font-weight:900;
-      cursor:pointer;
+      padding:10px 12px; border:none; border-radius:10px;
+      font-weight:900; cursor:pointer; color:#fff;
+      letter-spacing:0.4px; text-transform:uppercase; min-width:160px;
       background:#2c3e50;
-      color:#fff;
-      letter-spacing:0.4px;
-      text-transform:uppercase;
-      min-width: 160px;
     }
     .mini-btns button.alt{ background:#667eea; }
     .mini-btns button.warn{ background:#f39c12; color:#1f1f1f; }
@@ -80,7 +72,7 @@
     .info-section { padding:14px; background:#f8f9fa; border-radius:14px; }
     .info-section h3 { color:#667eea; margin-bottom:10px; }
     .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:12px; }
-    label { display:block; margin-bottom:6px; font-weight:800; color:#666; }
+    label { display:block; margin-bottom:6px; font-weight:900; color:#666; }
     select, input[type="number"] {
       width:100%;
       padding:10px;
@@ -91,6 +83,8 @@
       background:#fff;
     }
     .hint { margin-top:6px; font-size:12px; color:#666; line-height:1.35; }
+    .tiny { font-size:12px; color:#666; margin-top:10px; line-height:1.35; }
+    .row-note { margin-top:8px; font-size:12px; color:#666; }
 
     .main-content {
       display:grid;
@@ -98,10 +92,7 @@
       gap: 18px;
       margin-top: 14px;
     }
-    @media (max-width: 968px) {
-      .main-content { grid-template-columns: 1fr; }
-      h1 { font-size: 1.75em; }
-    }
+    @media (max-width: 968px) { .main-content { grid-template-columns: 1fr; } h1 { font-size: 1.75em; } }
 
     .video-section { position:relative; }
     #videoContainer {
@@ -184,7 +175,7 @@
     }
     .metric-label { font-size:12px; color:#666; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; }
     .metric-value { font-size:18px; font-weight:900; color:#222; }
-    .metric-unit { font-size:13px; color:#999; margin-left:6px; font-weight:800; }
+    .metric-unit { font-size:13px; color:#999; margin-left:6px; font-weight:900; }
 
     .phase-indicator { display:flex; justify-content:space-between; margin-top:10px; }
     .phase-dot {
@@ -246,6 +237,7 @@
       border-radius:15px;
     }
     .charts-section h3 { color:#667eea; margin-bottom:12px; }
+
     .chart-container {
       background:white;
       padding:14px;
@@ -256,9 +248,6 @@
     .chart-wrap { height: 260px; }
     .chart-wrap.tall { height: 320px; }
     .chart-container canvas { width:100% !important; height:100% !important; }
-
-    .tiny { font-size:12px; color:#666; margin-top:10px; line-height:1.35; }
-    .row-note { margin-top:8px; font-size:12px; color:#666; }
 
     .video-controls {
       margin-top: 12px;
@@ -295,6 +284,7 @@
       font-size: 12px;
       color: #333;
     }
+
     .step-select {
       display:grid;
       grid-template-columns: 160px 1fr;
@@ -312,12 +302,7 @@
       background:#fff;
     }
 
-    footer {
-      margin-top: 12px;
-      text-align:center;
-      color:#666;
-      font-size:12px;
-    }
+    footer { margin-top: 12px; text-align:center; color:#666; font-size:12px; }
   </style>
 </head>
 
@@ -325,13 +310,10 @@
 <div class="container">
   <h1>🏃 Gait Biodynamics Lab</h1>
   <p class="subtitle">
-    Camera + Upload High-FPS Video • Per-step GRF proxy curves • Developed by Ng Jun Wei<br>
-    <span class="mono">If init freezes, use the buttons that appear to force WebGL/CPU.</span>
+    Camera (attempt 120fps) + Upload High-FPS Video (e.g., 240fps) • Seek + Frame-step • Per-step GRF-time proxy curves • Application is developed by Ng Jun Wei
   </p>
 
-  <div id="status" class="status loading">
-    <span class="loading-spinner"></span> Initializing…
-  </div>
+  <div id="status" class="status loading"><span class="loading-spinner"></span> Initializing…</div>
 
   <div id="initFallback" class="mini-btns" style="display:none;">
     <button class="alt" id="retryInitBtn">Retry Init</button>
@@ -348,7 +330,7 @@
           <option value="sagittal" selected>Sagittal (Side View)</option>
           <option value="frontal">Frontal (Front/Back View)</option>
         </select>
-        <div class="hint">Sagittal: overstride • Frontal: pelvic tilt + knee drift + crossover gait.</div>
+        <div class="hint">Sagittal: overstride • Frontal: lateral pelvic tilt + knee drift + crossover gait.</div>
       </div>
       <div>
         <label>Sex</label>
@@ -370,6 +352,7 @@
         <input type="number" id="subjectHeight" min="100" max="250" step="0.1" value="170">
       </div>
     </div>
+    <div class="tiny">Tip: Height calibration converts pixel distance to cm (approx). For best accuracy, keep the runner fully in-frame.</div>
   </div>
 
   <div class="main-content">
@@ -402,6 +385,7 @@
             <div>
               <label>Assumed Video FPS (for frame-step)</label>
               <input id="assumedFps" type="number" min="10" max="1000" step="1" value="240">
+              <div class="hint">This affects frame-step only (±1 frame).</div>
             </div>
             <div>
               <label>Frame Step Size</label>
@@ -410,6 +394,7 @@
                 <option value="2">±2 frames</option>
                 <option value="5">±5 frames</option>
               </select>
+              <div class="hint">Use larger steps if scrubbing lags.</div>
             </div>
           </div>
 
@@ -502,7 +487,7 @@
       </div>
 
       <div class="tiny">
-        GRF proxy curve uses ankle vertical deceleration during stance (normalized to BW proxy). Not a force plate.
+        Labels: <b>Overstrider</b> = excessive overstride (sagittal) • <b>Collapser</b> = excessive lateral pelvic tilt • <b>Bouncer</b> = excessive VO • <b>Crosser</b> = crossover gait.
       </div>
     </div>
   </div>
@@ -539,23 +524,21 @@
 
 <script>
   // ===========================
-  // HARDENING: show *all* errors
+  // Error surfacing (prevents silent “Initializing…” freeze)
   // ===========================
   const statusDiv = document.getElementById('status');
   const initFallback = document.getElementById('initFallback');
-  function setStatus(type, html){
-    statusDiv.className = 'status ' + type;
-    statusDiv.innerHTML = html;
-  }
+  function setStatus(type, html){ statusDiv.className='status '+type; statusDiv.innerHTML=html; }
+
   window.addEventListener('error', (e)=>{
     console.error('window.error:', e.error || e.message);
-    initFallback.style.display = 'flex';
-    setStatus('error', '✗ Error: ' + (e.error?.message || e.message || 'unknown'));
+    initFallback.style.display='flex';
+    setStatus('error','✗ Error: '+(e.error?.message || e.message || 'unknown'));
   });
   window.addEventListener('unhandledrejection', (e)=>{
     console.error('unhandledrejection:', e.reason);
-    initFallback.style.display = 'flex';
-    setStatus('error', '✗ Promise rejected: ' + (e.reason?.message || String(e.reason)));
+    initFallback.style.display='flex';
+    setStatus('error','✗ Promise rejected: '+(e.reason?.message || String(e.reason)));
   });
 
   // ============================================================
@@ -569,6 +552,7 @@
   // DOM
   // ============================================================
   const fpsDisplay = document.getElementById('fpsDisplay');
+
   const startCamBtn = document.getElementById('startCamBtn');
   const loadVideoBtn = document.getElementById('loadVideoBtn');
   const playPauseBtn = document.getElementById('playPauseBtn');
@@ -576,6 +560,10 @@
   const recordBtn = document.getElementById('recordBtn');
   const exportBtn = document.getElementById('exportBtn');
   const snapshotBtn = document.getElementById('snapshotBtn');
+
+  const retryInitBtn = document.getElementById('retryInitBtn');
+  const forceWebglBtn = document.getElementById('forceWebglBtn');
+  const forceCpuBtn = document.getElementById('forceCpuBtn');
 
   const videoFile = document.getElementById('videoFile');
   const webcam = document.getElementById('webcam');
@@ -594,6 +582,7 @@
   const subjectMassEl = document.getElementById('subjectMass');
   const subjectHeightEl = document.getElementById('subjectHeight');
 
+  // Uploaded video controls
   const videoControlsPanel = document.getElementById('videoControlsPanel');
   const seekBar = document.getElementById('seekBar');
   const timeLabel = document.getElementById('timeLabel');
@@ -605,17 +594,14 @@
   const skipFwdBtn = document.getElementById('skipFwdBtn');
   const videoMetaLabel = document.getElementById('videoMetaLabel');
 
+  // GRF curve selector
   const stepPicker = document.getElementById('stepPicker');
-
-  const retryInitBtn = document.getElementById('retryInitBtn');
-  const forceWebglBtn = document.getElementById('forceWebglBtn');
-  const forceCpuBtn = document.getElementById('forceCpuBtn');
 
   // ============================================================
   // State
   // ============================================================
   let detector = null;
-  let sourceMode = 'none';
+  let sourceMode = 'none'; // camera | video | none
   let mediaStream = null;
   let videoObjectUrl = null;
 
@@ -629,213 +615,315 @@
   let loopFpsT0 = 0;
 
   // ============================================================
-  // Init watchdog (prevents “stuck initializing forever”)
+  // Init watchdog (so it never stalls silently)
   // ============================================================
   let initWatchdog = null;
   function armInitWatchdog(){
     clearTimeout(initWatchdog);
     initWatchdog = setTimeout(()=>{
-      initFallback.style.display = 'flex';
-      setStatus('error',
-        '⚠️ Init is taking too long on this device.<br>' +
-        'Tap <b>Force WebGL</b> or <b>Force CPU</b> to continue.'
-      );
+      initFallback.style.display='flex';
+      setStatus('error', '⚠️ Init is taking too long.<br>Try <b>Force WebGL</b> or <b>Force CPU</b>.');
     }, 9000);
   }
-  function disarmInitWatchdog(){
-    clearTimeout(initWatchdog);
-    initWatchdog = null;
-  }
+  function disarmInitWatchdog(){ clearTimeout(initWatchdog); initWatchdog=null; }
 
-  // ============================================================
-  // Force-backend init options (for iPhone Safari)
-  // ============================================================
   let backendPreference = null; // null=auto, 'webgl', 'cpu'
-
-  retryInitBtn.addEventListener('click', ()=> boot(true));
-  forceWebglBtn.addEventListener('click', ()=> { backendPreference='webgl'; boot(true); });
-  forceCpuBtn.addEventListener('click', ()=> { backendPreference='cpu'; boot(true); });
+  retryInitBtn.addEventListener('click', ()=>boot(true));
+  forceWebglBtn.addEventListener('click', ()=>{ backendPreference='webgl'; boot(true); });
+  forceCpuBtn.addEventListener('click', ()=>{ backendPreference='cpu'; boot(true); });
 
   // ============================================================
-  // Sex thresholds
+  // Sex-specific thresholds
   // ============================================================
   const TH = {
-    male: { pelvicTiltWarn: 8, pelvicTiltCrit: 12, voWarnCm: 10, voCritCm: 13, overModerate: 0.20, overHigh: 0.30, crossoverWarnHipW: 0.12, crossoverCritHipW: 0.18 },
-    female:{ pelvicTiltWarn:10, pelvicTiltCrit:14, voWarnCm: 11, voCritCm: 14, overModerate: 0.18, overHigh: 0.28, crossoverWarnHipW: 0.10, crossoverCritHipW: 0.16 }
+    male:   { pelvicWarn: 8, pelvicCrit: 12, voWarn: 10, voCrit: 13, overMod: 0.20, overHigh: 0.30, xoverWarn: 0.12, xoverCrit: 0.18 },
+    female: { pelvicWarn:10, pelvicCrit: 14, voWarn: 11, voCrit: 14, overMod: 0.18, overHigh: 0.28, xoverWarn: 0.10, xoverCrit: 0.16 }
   };
+  function thr(){ return TH[subjectSexEl.value] || TH.male; }
 
   // ============================================================
-  // Gait state
+  // Per-step gait state (concurrent L/R)
   // ============================================================
-  function makeFootState(side){
-    return { side, groundY:null, contact:false, prev:{t:0,x:0,y:0,ok:false}, prevVY:0, active:null, lastTO:null, lastIC:null, lastIC_hipX:null };
+  function makeFootState(side) {
+    return {
+      side,
+      groundY: null,
+      contact: false,
+      prev: { t: 0, x: 0, y: 0, ok: false },
+      prevVY: 0,
+      active: null,
+      lastTO: null,
+      lastIC: null,
+      lastIC_hipX: null
+    };
   }
-  const gait = { feet:{L:makeFootState('L'), R:makeFootState('R')}, steps:[], icTimes:[], recentWindow:6, vo:{baselineY:null, maxDevPx:0, windowFrames:0, lastVOcm:0} };
+
+  const gait = {
+    feet: { L: makeFootState('L'), R: makeFootState('R') },
+    steps: [],
+    icTimes: [],
+    recentWindow: 6,
+    vo: { baselineY: null, maxDevPx: 0, windowFrames: 0, lastVOcm: 0 }
+  };
+
   let detectedIssues = new Set();
 
   // ============================================================
   // Charts + LPF
   // ============================================================
   let strideChart, stanceChart, kneeMSChart, grfCurveChart;
-  const emaSeries = (vals, alpha=0.28)=>{ let prev=null; return vals.map(v=>{ if(v==null||!isFinite(v)) return null; if(prev==null){prev=v; return v;} prev=alpha*v+(1-alpha)*prev; return prev; }); };
-  const sma = (vals, win=6)=>{ const out=[]; for(let i=0;i<vals.length;i++){ let s=0,c=0; for(let j=Math.max(0,i-win+1); j<=i; j++){ const v=vals[j]; if(v==null||!isFinite(v)) continue; s+=v; c++; } out.push(c? s/c:null); } return out; };
+
+  function emaSeries(vals, alpha=0.28){
+    let prev=null;
+    return vals.map(v=>{
+      if(v==null || !isFinite(v)) return null;
+      if(prev==null){ prev=v; return v; }
+      prev = alpha*v + (1-alpha)*prev;
+      return prev;
+    });
+  }
+  function sma(vals, win=6){
+    const out=[];
+    for(let i=0;i<vals.length;i++){
+      let s=0,c=0;
+      for(let j=Math.max(0,i-win+1); j<=i; j++){
+        const v=vals[j];
+        if(v==null || !isFinite(v)) continue;
+        s+=v; c++;
+      }
+      out.push(c? s/c : null);
+    }
+    return out;
+  }
 
   function baseChartOptions(xTitle,yTitle){
     return {
-      responsive:true, maintainAspectRatio:false, animation:false, normalized:true,
+      responsive:true,
+      maintainAspectRatio:false,
+      animation:false,
+      normalized:true,
       interaction:{ mode:'index', intersect:false },
       plugins:{ legend:{ display:true, labels:{ boxWidth:10, boxHeight:10 } } },
       elements:{ point:{ radius:0, hitRadius:10 }, line:{ borderWidth:3, tension:0.35 } },
-      scales:{ x:{ title:{ display:true, text:xTitle } }, y:{ title:{ display:true, text:yTitle } } }
+      scales:{
+        x:{ title:{ display:true, text:xTitle } },
+        y:{ title:{ display:true, text:yTitle }, beginAtZero:false }
+      }
     };
   }
-  function initCharts(){
-    strideChart = new Chart(document.getElementById('strideChart'), { type:'line', data:{labels:[], datasets:[{label:'Stride Length (cm) (LPF)', data:[]}]}, options: baseChartOptions('Step #','cm') });
-    stanceChart = new Chart(document.getElementById('stanceChart'), { type:'line', data:{labels:[], datasets:[{label:'Stance Time (s) (LPF)', data:[]},{label:'Swing Time (s) (LPF)', data:[]}]}, options: baseChartOptions('Step #','seconds') });
-    kneeMSChart = new Chart(document.getElementById('kneeMSChart'), { type:'line', data:{labels:[], datasets:[{label:'Knee Flexion Mid-Stance L (°) (LPF)', data:[]},{label:'Knee Flexion Mid-Stance R (°) (LPF)', data:[]}]}, options: baseChartOptions('Step #','degrees') });
-    grfCurveChart = new Chart(document.getElementById('grfCurveChart'), { type:'line', data:{labels:[], datasets:[{label:'GRF Proxy (BW) (smoothed)', data:[]}]}, options: baseChartOptions('ms from IC','BW (proxy)') });
-  }
-  function numOrNull(v){ return (typeof v==='number' && isFinite(v)) ? v : null; }
 
-  function updateChartsFromSteps(){
-    const slice = gait.steps.slice(Math.max(0, gait.steps.length-120));
-    const labels = slice.map(s=>String(s.idx));
+  function initCharts() {
+    strideChart = new Chart(document.getElementById('strideChart'), {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'Stride Length (cm) (LPF)', data: [] }] },
+      options: baseChartOptions('Step #','cm')
+    });
+
+    stanceChart = new Chart(document.getElementById('stanceChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Stance Time (s) (LPF)', data: [] },
+          { label: 'Swing Time (s) (LPF)', data: [] }
+        ]
+      },
+      options: baseChartOptions('Step #','seconds')
+    });
+
+    kneeMSChart = new Chart(document.getElementById('kneeMSChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Knee Flexion Mid-Stance L (°) (LPF)', data: [] },
+          { label: 'Knee Flexion Mid-Stance R (°) (LPF)', data: [] }
+        ]
+      },
+      options: baseChartOptions('Step #','degrees')
+    });
+
+    grfCurveChart = new Chart(document.getElementById('grfCurveChart'), {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'GRF Proxy (BW) (smoothed)', data: [] }] },
+      options: baseChartOptions('ms from IC','BW (proxy)')
+    });
+  }
+
+  function numOrNull(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
+
+  function updateChartsFromSteps() {
+    const steps = gait.steps;
+    const slice = steps.slice(Math.max(0, steps.length - 120));
+    const labels = slice.map(s => String(s.idx));
 
     strideChart.data.labels = labels;
-    strideChart.data.datasets[0].data = emaSeries(slice.map(s=>numOrNull(s.strideCm)));
+    strideChart.data.datasets[0].data = emaSeries(slice.map(s => numOrNull(s.strideCm)));
     strideChart.update('none');
 
     stanceChart.data.labels = labels;
-    stanceChart.data.datasets[0].data = emaSeries(slice.map(s=>numOrNull(s.stanceTimeS)));
-    stanceChart.data.datasets[1].data = emaSeries(slice.map(s=>numOrNull(s.swingTimeS)));
+    stanceChart.data.datasets[0].data = emaSeries(slice.map(s => numOrNull(s.stanceTimeS)));
+    stanceChart.data.datasets[1].data = emaSeries(slice.map(s => numOrNull(s.swingTimeS)));
     stanceChart.update('none');
 
     kneeMSChart.data.labels = labels;
-    kneeMSChart.data.datasets[0].data = emaSeries(slice.map(s=>s.side==='L'?numOrNull(s.kneeMidStanceDeg):null),0.30);
-    kneeMSChart.data.datasets[1].data = emaSeries(slice.map(s=>s.side==='R'?numOrNull(s.kneeMidStanceDeg):null),0.30);
+    kneeMSChart.data.datasets[0].data = emaSeries(slice.map(s => (s.side === 'L') ? numOrNull(s.kneeMidStanceDeg) : null), 0.30);
+    kneeMSChart.data.datasets[1].data = emaSeries(slice.map(s => (s.side === 'R') ? numOrNull(s.kneeMidStanceDeg) : null), 0.30);
     kneeMSChart.update('none');
 
     rebuildStepPicker();
   }
-  function rebuildStepPicker(){
-    if(!gait.steps.length){ stepPicker.innerHTML='<option value="">(no steps yet)</option>'; return; }
-    const cur=stepPicker.value;
-    stepPicker.innerHTML = gait.steps.slice(-200).map(s=>{
-      const ttp=(typeof s.grfTimeToPeakMs==='number')?`${Math.round(s.grfTimeToPeakMs)}ms`:'—';
-      const peak=(typeof s.grfPeakBW==='number')?s.grfPeakBW.toFixed(2):'—';
+
+  function rebuildStepPicker() {
+    if (!gait.steps.length) {
+      stepPicker.innerHTML = '<option value="">(no steps yet)</option>';
+      return;
+    }
+    const current = stepPicker.value;
+    stepPicker.innerHTML = gait.steps.slice(-200).map(s => {
+      const ttp = (typeof s.grfTimeToPeakMs === 'number') ? `${Math.round(s.grfTimeToPeakMs)}ms` : '—';
+      const peak = (typeof s.grfPeakBW === 'number') ? s.grfPeakBW.toFixed(2) : '—';
       return `<option value="${s.idx}">#${s.idx} (${s.side}) peak ${peak}BW, TTP ${ttp}</option>`;
     }).join('');
-    if(cur && gait.steps.some(s=>String(s.idx)===cur)) stepPicker.value=cur;
-    else stepPicker.value=String(gait.steps[gait.steps.length-1].idx);
+
+    if (current && gait.steps.some(s => String(s.idx) === current)) stepPicker.value = current;
+    else stepPicker.value = String(gait.steps[gait.steps.length - 1].idx);
+
     renderSelectedGRFCurve();
   }
-  function renderSelectedGRFCurve(){
-    const v=stepPicker.value;
-    if(!v) return;
-    const s=gait.steps.find(x=>String(x.idx)===v);
-    if(!s || !s.grfCurve || !s.grfCurve.length){
-      grfCurveChart.data.labels=[]; grfCurveChart.data.datasets[0].data=[]; grfCurveChart.update('none'); return;
+
+  function renderSelectedGRFCurve() {
+    const v = stepPicker.value;
+    if (!v) return;
+    const step = gait.steps.find(s => String(s.idx) === v);
+    if (!step || !step.grfCurve || !step.grfCurve.length) {
+      grfCurveChart.data.labels = [];
+      grfCurveChart.data.datasets[0].data = [];
+      grfCurveChart.update('none');
+      return;
     }
-    const labels=s.grfCurve.map(p=>String(Math.round(p.tRelMs)));
-    const raw=s.grfCurve.map(p=>p.bw);
-    const sm=sma(raw,6);
-    grfCurveChart.data.labels=labels;
-    grfCurveChart.data.datasets[0].data=sm;
+    const labels = step.grfCurve.map(p => String(Math.round(p.tRelMs)));
+    const raw = step.grfCurve.map(p => p.bw);
+    const sm = sma(raw, 6);
+    grfCurveChart.data.labels = labels;
+    grfCurveChart.data.datasets[0].data = sm;
     grfCurveChart.update('none');
   }
 
   // ============================================================
   // UI helpers
   // ============================================================
-  function viewMode(){ return viewModeEl.value; }
-  function syncModeUI(){
-    const m=viewMode();
-    modePill.textContent=m.toUpperCase();
-    if(m==='sagittal'){ modePill.style.background='#667eea'; modeMetricLabel.textContent='Overstride Risk (last IC)'; if(!modeMetricValue.textContent) modeMetricValue.textContent='Low'; }
-    else { modePill.style.background='#e67e22'; modeMetricLabel.textContent='Knee Medial Drift (proxy) - live'; if(!modeMetricValue.textContent.includes('°')) modeMetricValue.textContent='0.0°'; }
+  function viewMode() { return viewModeEl.value; }
+
+  function syncModeUI() {
+    const m = viewMode();
+    modePill.textContent = m.toUpperCase();
+    if (m === 'sagittal') {
+      modePill.style.background = '#667eea';
+      modeMetricLabel.textContent = 'Overstride Risk (last IC)';
+      if (!modeMetricValue.textContent) modeMetricValue.textContent = 'Low';
+    } else {
+      modePill.style.background = '#e67e22';
+      modeMetricLabel.textContent = 'Knee Medial Drift (proxy) - live';
+      if (!modeMetricValue.textContent.includes('°')) modeMetricValue.textContent = '0.0°';
+    }
   }
-  function setSourceUI(mode){
-    sourceMode=mode;
+
+  function setSourceUI(mode) {
+    sourceMode = mode;
     sourcePill.textContent = mode.toUpperCase();
-    sourcePill.style.background = (mode==='camera') ? '#16a085' : (mode==='video') ? '#f39c12' : '#2c3e50';
-    sourceNote.textContent = (mode==='camera') ? 'Source: camera stream' : (mode==='video') ? 'Source: uploaded video file' : 'Source: none';
-    videoControlsPanel.style.display = (mode==='video') ? 'block' : 'none';
+    sourcePill.style.background = (mode === 'camera') ? '#16a085' : (mode === 'video') ? '#f39c12' : '#2c3e50';
+    sourceNote.textContent = (mode === 'camera')
+      ? 'Source: camera stream'
+      : (mode === 'video')
+        ? 'Source: uploaded video file'
+        : 'Source: none';
+
+    videoControlsPanel.style.display = (mode === 'video') ? 'block' : 'none';
   }
-  function setPhaseIndicator(phase){
-    for(let i=1;i<=4;i++) document.getElementById('phase'+i).classList.toggle('active', i===phase);
+
+  function setPhaseIndicator(phase) {
+    for (let i = 1; i <= 4; i++) {
+      document.getElementById('phase' + i).classList.toggle('active', i === phase);
+    }
   }
-  function setRecordButtonUI(){
+
+  function setRecordButtonUI() {
     recordBtn.classList.toggle('recording', isRecording);
     recordBtn.textContent = isRecording ? 'Stop Recording' : 'Start Recording';
   }
 
   // ============================================================
-  // Reset
+  // Reset state
   // ============================================================
-  function resetGaitAll(){
-    gait.feet.L=makeFootState('L'); gait.feet.R=makeFootState('R');
-    gait.steps=[]; gait.icTimes=[];
-    gait.vo={baselineY:null, maxDevPx:0, windowFrames:0, lastVOcm:0};
-    detectedIssues=new Set();
+  function resetGaitAll() {
+    gait.feet.L = makeFootState('L');
+    gait.feet.R = makeFootState('R');
+    gait.steps = [];
+    gait.icTimes = [];
+    gait.vo = { baselineY: null, maxDevPx: 0, windowFrames: 0, lastVOcm: 0 };
+    detectedIssues = new Set();
 
-    document.getElementById('issuesList').innerHTML='<div style="text-align:center; color:#999; padding:18px;">No issues detected yet</div>';
-    document.getElementById('cadence').innerHTML=`0<span class="metric-unit">steps/min</span>`;
-    document.getElementById('stanceTime').innerHTML=`0<span class="metric-unit">s</span>`;
-    document.getElementById('swingTime').innerHTML=`0<span class="metric-unit">s</span>`;
-    document.getElementById('strideLength').innerHTML=`0<span class="metric-unit">cm</span>`;
-    document.getElementById('kneeMSL').innerHTML=`0<span class="metric-unit">°</span>`;
-    document.getElementById('kneeMSR').innerHTML=`0<span class="metric-unit">°</span>`;
-    document.getElementById('pelvicTilt').innerHTML=`0<span class="metric-unit">°</span>`;
-    document.getElementById('vertOsc').innerHTML=`0<span class="metric-unit">cm</span>`;
-    document.getElementById('grfPeak').innerHTML=`0<span class="metric-unit">BW</span>`;
-    document.getElementById('grfTTP').innerHTML=`0<span class="metric-unit">ms</span>`;
-    document.getElementById('gaitPhase').textContent='Standing';
+    document.getElementById('issuesList').innerHTML =
+      '<div style="text-align:center; color:#999; padding:18px;">No issues detected yet</div>';
+
+    document.getElementById('cadence').innerHTML = `0<span class="metric-unit">steps/min</span>`;
+    document.getElementById('stanceTime').innerHTML = `0<span class="metric-unit">s</span>`;
+    document.getElementById('swingTime').innerHTML = `0<span class="metric-unit">s</span>`;
+    document.getElementById('strideLength').innerHTML = `0<span class="metric-unit">cm</span>`;
+    document.getElementById('kneeMSL').innerHTML = `0<span class="metric-unit">°</span>`;
+    document.getElementById('kneeMSR').innerHTML = `0<span class="metric-unit">°</span>`;
+    document.getElementById('pelvicTilt').innerHTML = `0<span class="metric-unit">°</span>`;
+    document.getElementById('vertOsc').innerHTML = `0<span class="metric-unit">cm</span>`;
+    document.getElementById('grfPeak').innerHTML = `0<span class="metric-unit">BW</span>`;
+    document.getElementById('grfTTP').innerHTML = `0<span class="metric-unit">ms</span>`;
+    document.getElementById('gaitPhase').textContent = 'Standing';
     setPhaseIndicator(1);
 
-    exportBtn.disabled=true;
+    exportBtn.disabled = true;
 
-    if(strideChart){ strideChart.data.labels=[]; strideChart.data.datasets[0].data=[]; strideChart.update('none'); }
-    if(stanceChart){ stanceChart.data.labels=[]; stanceChart.data.datasets[0].data=[]; stanceChart.data.datasets[1].data=[]; stanceChart.update('none'); }
-    if(kneeMSChart){ kneeMSChart.data.labels=[]; kneeMSChart.data.datasets[0].data=[]; kneeMSChart.data.datasets[1].data=[]; kneeMSChart.update('none'); }
-    if(grfCurveChart){ grfCurveChart.data.labels=[]; grfCurveChart.data.datasets[0].data=[]; grfCurveChart.update('none'); }
+    if (strideChart) { strideChart.data.labels = []; strideChart.data.datasets[0].data = []; strideChart.update('none'); }
+    if (stanceChart) { stanceChart.data.labels = []; stanceChart.data.datasets[0].data = []; stanceChart.data.datasets[1].data = []; stanceChart.update('none'); }
+    if (kneeMSChart) { kneeMSChart.data.labels = []; kneeMSChart.data.datasets[0].data = []; kneeMSChart.data.datasets[1].data = []; kneeMSChart.update('none'); }
+    if (grfCurveChart) { grfCurveChart.data.labels = []; grfCurveChart.data.datasets[0].data = []; grfCurveChart.update('none'); }
     rebuildStepPicker();
   }
 
   // ============================================================
-  // TF backend init (with warm-up to avoid Safari “hang”)
+  // TF backend init (hardened for iOS Safari)
   // ============================================================
-  async function initTFBackend(){
-    setStatus('loading','<span class="loading-spinner"></span> TFJS: tf.ready()…');
+  async function initTFBackend() {
+    setStatus('loading', '<span class="loading-spinner"></span> TFJS: tf.ready()…');
     await tf.ready();
 
     const desired = backendPreference
       ? [backendPreference]
-      : (isIOS || isSafari) ? ['webgl','cpu'] : ['webgpu','webgl','cpu'];
+      : (isIOS || isSafari) ? ['webgl', 'cpu'] : ['webgpu', 'webgl', 'cpu'];
 
-    for (const b of desired){
-      try{
+    for (const b of desired) {
+      try {
         setStatus('loading', `<span class="loading-spinner"></span> TFJS: setBackend(${b})…`);
         await tf.setBackend(b);
         await tf.ready();
 
-        // Warm-up: force kernel compile (prevents “silent hang” later)
+        // Warm-up to avoid Safari stalls
         setStatus('loading', `<span class="loading-spinner"></span> TFJS: warming up (${b})…`);
-        tf.tidy(()=>{
-          const a=tf.randomUniform([64,64]);
-          const c=a.matMul(a);
-          c.dataSync(); // force execution
+        tf.tidy(() => {
+          const a = tf.randomUniform([64,64]);
+          const c = a.matMul(a);
+          c.dataSync();
         });
 
         return tf.getBackend();
-      }catch(e){
+      } catch (e) {
         console.warn('Backend failed:', b, e);
       }
     }
     throw new Error('No TFJS backend could be initialized.');
   }
 
-  async function initModel(){
-    initFallback.style.display='none';
+  async function initModel() {
+    initFallback.style.display = 'none';
     armInitWatchdog();
 
     const backend = await initTFBackend();
@@ -847,7 +935,7 @@
         modelType: (isIOS || isSafari)
           ? poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
           : poseDetection.movenet.modelType.SINGLEPOSE_THUNDER,
-        enableTracking:true,
+        enableTracking: true,
         trackerType: poseDetection.TrackerType.BoundingBox
       }
     );
@@ -859,306 +947,1114 @@
 
     disarmInitWatchdog();
     setStatus('ready', `✓ Model Ready (backend: ${backend}) — Choose Camera or Upload Video`);
-    startCamBtn.disabled=false;
-    loadVideoBtn.disabled=false;
+    startCamBtn.disabled = false;
+    loadVideoBtn.disabled = false;
   }
 
   // ============================================================
-  // The rest: camera / video / analysis / export
+  // Media cleanup
   // ============================================================
-  // (Kept minimal here so init-debug is the focus; your previous analysis code can be merged in.)
-  // For now, we only prove init works and camera starts.
-  let isInited = false;
+  function stopLoops() {
+    isRunning = false;
+    if (animId) cancelAnimationFrame(animId);
+    animId = null;
+    vfcActive = false;
+  }
 
-  function stopLoops(){
-    isRunning=false;
-    if(animId) cancelAnimationFrame(animId);
-    animId=null; vfcActive=false;
+  function stopStream() {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
   }
-  function stopStream(){
-    if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+
+  function revokeVideoUrl() {
+    if (videoObjectUrl) {
+      URL.revokeObjectURL(videoObjectUrl);
+      videoObjectUrl = null;
+    }
   }
-  function revokeVideoUrl(){
-    if(videoObjectUrl){ URL.revokeObjectURL(videoObjectUrl); videoObjectUrl=null; }
-  }
-  function clearVideoSource(){
-    try{ webcam.pause(); }catch(_){}
+
+  function clearVideoSource() {
+    try { webcam.pause(); } catch (_) {}
     webcam.removeAttribute('src');
-    webcam.srcObject=null;
+    webcam.srcObject = null;
     webcam.load();
   }
 
-  function stopRecording(){
-    if(!isRecording) return;
-    isRecording=false;
+  function stopRecordingClean() {
+    if (!isRecording) return;
+    isRecording = false;
     setRecordButtonUI();
-    exportBtn.disabled = gait.steps.length===0;
+    exportBtn.disabled = gait.steps.length === 0;
     setStatus('ready', `✓ Recording stopped — ${gait.steps.length} steps captured`);
-    if (strideChart) updateChartsFromSteps();
+    updateChartsFromSteps();
   }
 
-  function stopAll(){
-    stopRecording();
+  function stopAll() {
+    stopRecordingClean();
     stopLoops();
     stopStream();
     revokeVideoUrl();
     clearVideoSource();
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    fpsDisplay.textContent='FPS: 0';
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    fpsDisplay.textContent = 'FPS: 0';
     setSourceUI('none');
 
-    playPauseBtn.disabled=true;
-    stopBtn.disabled=true;
-    recordBtn.disabled=true;
-    exportBtn.disabled=true;
-    snapshotBtn.disabled=true;
+    playPauseBtn.disabled = true;
+    stopBtn.disabled = true;
+    recordBtn.disabled = true;
+    exportBtn.disabled = true;
+    snapshotBtn.disabled = true;
 
-    stepBackBtn.disabled=true;
-    stepFwdBtn.disabled=true;
-    skipBackBtn.disabled=true;
-    skipFwdBtn.disabled=true;
+    stepBackBtn.disabled = true;
+    stepFwdBtn.disabled = true;
+    skipBackBtn.disabled = true;
+    skipFwdBtn.disabled = true;
 
-    setStatus('ready','Stopped. Choose Camera or Upload Video.');
+    setStatus('ready', 'Stopped. Choose Camera or Upload Video.');
   }
 
-  function ensureSecureContextOrWarn(){
-    const ok = window.isSecureContext || location.hostname==='localhost' || location.hostname==='127.0.0.1';
-    if(!ok){
-      initFallback.style.display='flex';
-      setStatus('error','✗ Camera requires HTTPS. GitHub Pages must be https://');
-      throw new Error('Insecure context');
+  // ============================================================
+  // Secure context check (GitHub Pages OK)
+  // ============================================================
+  function ensureSecureContextOrThrow() {
+    const ok = window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    if (!ok) throw new Error('Camera requires HTTPS.');
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('getUserMedia not supported in this browser.');
+  }
+
+  // ============================================================
+  // Canvas sizing (CRITICAL for iPhone Safari)
+  // ============================================================
+  function resizeCanvasToVideo() {
+    const vw = webcam.videoWidth || 0;
+    const vh = webcam.videoHeight || 0;
+    if (!vw || !vh) return false;
+    if (canvas.width !== vw) canvas.width = vw;
+    if (canvas.height !== vh) canvas.height = vh;
+    return true;
+  }
+
+  // ============================================================
+  // Drawing skeleton (stick figure)
+  // ============================================================
+  function drawSkeleton(keypoints) {
+    if (!resizeCanvasToVideo()) return;
+
+    // Do NOT clear here if you want trails; we want clean overlay:
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const S = 0.35;
+    const K = (i) => (keypoints[i] && keypoints[i].score >= S) ? keypoints[i] : null;
+
+    // MoveNet (COCO) indices:
+    // 0 nose, 5 LS,6 RS, 7 LE,8 RE, 9 LW,10 RW, 11 LH,12 RH, 13 LK,14 RK, 15 LA,16 RA
+    const conns = [
+      [5,7], [7,9],
+      [6,8], [8,10],
+      [5,6],
+      [11,12],
+      [5,11], [6,12],
+      [11,13], [13,15],
+      [12,14], [14,16]
+    ];
+
+    const leftIdx = new Set([5,7,9,11,13,15]);
+    const rightIdx = new Set([6,8,10,12,14,16]);
+
+    const lw = Math.max(3, Math.round(Math.min(canvas.width, canvas.height) * 0.006));
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = lw;
+
+    // segments
+    for (const [a,b] of conns) {
+      const p1 = K(a), p2 = K(b);
+      if (!p1 || !p2) continue;
+
+      let color = '#9b59b6';
+      if (leftIdx.has(a) && leftIdx.has(b)) color = '#3498db';
+      if (rightIdx.has(a) && rightIdx.has(b)) color = '#2ecc71';
+
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
     }
-    if(!navigator.mediaDevices?.getUserMedia){
-      initFallback.style.display='flex';
-      setStatus('error','✗ getUserMedia not supported.');
-      throw new Error('getUserMedia unavailable');
+
+    // joints
+    const r = Math.max(5, Math.round(Math.min(canvas.width, canvas.height) * 0.01));
+    for (let i = 0; i < keypoints.length; i++) {
+      const p = K(i);
+      if (!p) continue;
+
+      let fill = '#9b59b6';
+      if (leftIdx.has(i)) fill = '#3498db';
+      if (rightIdx.has(i)) fill = '#2ecc71';
+
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = Math.max(2, Math.round(lw * 0.45));
+      ctx.stroke();
     }
   }
 
-  async function startCamera(){
-    try{
-      if(!detector) return alert('Model not ready yet.');
-      ensureSecureContextOrWarn();
+  // ============================================================
+  // Loop + pose
+  // ============================================================
+  async function loopPose(tNowMs) {
+    if (!isRunning || !detector) return;
+
+    loopFrames++;
+    const nowPerf = performance.now();
+    if ((nowPerf - loopFpsT0) >= 1000) {
+      const loopFps = Math.round(loopFrames * 1000 / (nowPerf - loopFpsT0));
+      fpsDisplay.textContent = `FPS: ${loopFps}` + (sourceMode === 'video' ? ' (analysis)' : '');
+      loopFrames = 0;
+      loopFpsT0 = nowPerf;
+    }
+
+    try {
+      const poses = await detector.estimatePoses(webcam, { maxPoses: 1, flipHorizontal: false });
+      if (poses && poses[0]?.keypoints?.length) {
+        const kps = poses[0].keypoints;
+        drawSkeleton(kps);
+        analyzePerFrame(kps, tNowMs);
+      } else {
+        if (resizeCanvasToVideo()) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    } catch (e) {
+      console.error('Pose error:', e);
+    }
+
+    if (sourceMode === 'camera') {
+      animId = requestAnimationFrame(() => loopPose(performance.now()));
+    }
+  }
+
+  function startCameraAnalysisLoop() {
+    stopLoops();
+    isRunning = true;
+    loopFrames = 0;
+    loopFpsT0 = performance.now();
+    animId = requestAnimationFrame(() => loopPose(performance.now()));
+  }
+
+  function startVideoAnalysisLoop() {
+    stopLoops();
+    isRunning = true;
+    loopFrames = 0;
+    loopFpsT0 = performance.now();
+
+    if (useVFC) {
+      vfcActive = true;
+      const cb = (now, metadata) => {
+        if (!vfcActive || !isRunning || webcam.paused || webcam.ended) return;
+        const tMs = (metadata && typeof metadata.mediaTime === 'number')
+          ? metadata.mediaTime * 1000
+          : (webcam.currentTime * 1000);
+        loopPose(tMs);
+        webcam.requestVideoFrameCallback(cb);
+      };
+      webcam.requestVideoFrameCallback(cb);
+    } else {
+      const raf = () => {
+        if (!isRunning || webcam.paused || webcam.ended) return;
+        loopPose(webcam.currentTime * 1000);
+        animId = requestAnimationFrame(raf);
+      };
+      animId = requestAnimationFrame(raf);
+    }
+  }
+
+  // ============================================================
+  // Camera start (iOS-safe)
+  // ============================================================
+  async function startCamera() {
+    try {
+      if (!detector) throw new Error('Model not ready yet.');
+      ensureSecureContextOrThrow();
 
       stopAll();
       resetGaitAll();
+
+      setStatus('loading', '<span class="loading-spinner"></span> Starting camera…');
       setSourceUI('camera');
 
-      setStatus('loading','<span class="loading-spinner"></span> Starting camera…');
+      webcam.muted = true;
+      webcam.playsInline = true;
+      webcam.setAttribute('playsinline', '');
+      webcam.setAttribute('muted', '');
 
-      webcam.muted=true;
-      webcam.playsInline=true;
-      webcam.setAttribute('playsinline','');
-      webcam.setAttribute('muted','');
-      webcam.setAttribute('autoplay','');
+      // iOS Safari: request a simple stream first, then apply constraints
+      const base = { audio:false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } };
+      let stream = null;
+      try { stream = await navigator.mediaDevices.getUserMedia(base); }
+      catch (_) { stream = await navigator.mediaDevices.getUserMedia({ audio:false, video:true }); }
 
-      const baseConstraints = { audio:false, video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} } };
-      let stream;
-      try{ stream = await navigator.mediaDevices.getUserMedia(baseConstraints); }
-      catch(e){ stream = await navigator.mediaDevices.getUserMedia({audio:false, video:true}); }
+      mediaStream = stream;
+      webcam.srcObject = stream;
 
-      mediaStream=stream;
-      webcam.srcObject=stream;
-
-      await new Promise(res=>webcam.onloadedmetadata=()=>res());
-
-      // play must be in a gesture on iOS: but at least we surface the real error now
+      await new Promise(res => webcam.onloadedmetadata = () => res());
       await webcam.play();
 
-      canvas.width = webcam.videoWidth||640;
-      canvas.height = webcam.videoHeight||480;
+      resizeCanvasToVideo();
 
       const track = stream.getVideoTracks()[0];
-      try{ await track.applyConstraints?.({ frameRate:{ ideal:120, max:120 } }); }catch(_){}
-
-      const settings = track?.getSettings?.() || {};
+      // Try to push fps higher (may be ignored on iPhone)
+      try { await track.applyConstraints({ frameRate: { ideal: 120, max: 120 } }); } catch (_) {}
+      const settings = track.getSettings ? track.getSettings() : {};
       const gotFps = settings.frameRate ? Math.round(settings.frameRate) : null;
 
-      stopBtn.disabled=false;
-      recordBtn.disabled=false;
-      snapshotBtn.disabled=false;
+      stopBtn.disabled = false;
+      recordBtn.disabled = false;
+      snapshotBtn.disabled = false;
+      playPauseBtn.disabled = true;
 
-      isRecording=false;
+      isRecording = false;
       setRecordButtonUI();
 
-      setStatus('ready', gotFps ? `🎥 Camera active (delivered ~${gotFps} fps).` : '🎥 Camera active.');
-    }catch(e){
-      console.error(e);
-      initFallback.style.display='flex';
-      setStatus('error','✗ Camera Error: ' + (e?.message||e));
+      setStatus('ready', gotFps && gotFps < 90
+        ? `⚠️ Camera delivered ~${gotFps} fps. Analysis works; timing is less crisp than true 120fps.`
+        : '🎥 Camera active. Ready.');
+
+      startCameraAnalysisLoop();
+    } catch (e) {
       setSourceUI('none');
+      initFallback.style.display='flex';
+      setStatus('error', '✗ Camera Error: ' + (e?.message || e));
+      console.error(e);
     }
   }
 
-  async function loadVideoFile(file){
-    try{
+  // ============================================================
+  // Video upload
+  // ============================================================
+  async function loadVideoFile(file) {
+    try {
       stopAll();
       resetGaitAll();
 
       setSourceUI('video');
-      setStatus('loading','<span class="loading-spinner"></span> Loading video…');
+      setStatus('loading', '<span class="loading-spinner"></span> Loading video…');
 
       revokeVideoUrl();
       videoObjectUrl = URL.createObjectURL(file);
 
-      webcam.muted=true;
-      webcam.playsInline=true;
-      webcam.setAttribute('playsinline','');
-      webcam.setAttribute('muted','');
+      webcam.muted = true;
+      webcam.playsInline = true;
+      webcam.setAttribute('playsinline', '');
+      webcam.setAttribute('muted', '');
 
-      webcam.src=videoObjectUrl;
+      webcam.src = videoObjectUrl;
       webcam.load();
 
-      await new Promise((res,rej)=>{
-        webcam.addEventListener('loadeddata', ()=>res(), {once:true});
-        webcam.addEventListener('error', ()=>rej(new Error('Failed to load video')), {once:true});
+      await new Promise((res, rej) => {
+        const onLoaded = () => res();
+        const onErr = () => rej(new Error('Failed to load video'));
+        webcam.addEventListener('loadeddata', onLoaded, { once: true });
+        webcam.addEventListener('error', onErr, { once: true });
       });
 
-      canvas.width = webcam.videoWidth||640;
-      canvas.height = webcam.videoHeight||480;
+      resizeCanvasToVideo();
 
-      stopBtn.disabled=false;
-      recordBtn.disabled=false;
-      snapshotBtn.disabled=false;
-      playPauseBtn.disabled=false;
+      stopBtn.disabled = false;
+      recordBtn.disabled = false;
+      snapshotBtn.disabled = false;
+      playPauseBtn.disabled = false;
 
-      stepBackBtn.disabled=false;
-      stepFwdBtn.disabled=false;
-      skipBackBtn.disabled=false;
-      skipFwdBtn.disabled=false;
+      stepBackBtn.disabled = false;
+      stepFwdBtn.disabled = false;
+      skipBackBtn.disabled = false;
+      skipFwdBtn.disabled = false;
 
-      isRecording=false;
+      isRecording = false;
       setRecordButtonUI();
 
-      playPauseBtn.textContent='Play';
+      playPauseBtn.textContent = 'Play';
       updateSeekUI();
-      videoMetaLabel.textContent = `Video: ${webcam.videoWidth}x${webcam.videoHeight}, duration ${formatTime(webcam.duration)}s`;
+      videoMetaLabel.textContent = `Video: ${webcam.videoWidth}x${webcam.videoHeight}, duration ${formatTime(webcam.duration)}s, VFC: ${useVFC ? 'yes' : 'no'}`;
 
-      setStatus('ready','📼 Video loaded. Press Play, or scrub.');
-    }catch(e){
-      console.error(e);
-      initFallback.style.display='flex';
-      setStatus('error','✗ Video Error: ' + (e?.message||e));
+      setStatus('ready', '📼 Video loaded. Press Play, or scrub using seek / frame-step.');
+      fpsDisplay.textContent = 'FPS: 0';
+    } catch (e) {
       setSourceUI('none');
+      initFallback.style.display='flex';
+      setStatus('error', '✗ Video Error: ' + (e?.message || e));
+      console.error(e);
     }
   }
 
-  async function togglePlayPause(){
-    if(sourceMode!=='video' || !webcam.src) return;
-    if(webcam.paused){
+  async function togglePlayPause() {
+    if (sourceMode !== 'video') return;
+    if (!webcam.src) return;
+
+    if (webcam.paused) {
       await webcam.play();
-      playPauseBtn.textContent='Pause';
+      playPauseBtn.textContent = 'Pause';
+      startVideoAnalysisLoop();
     } else {
       webcam.pause();
-      playPauseBtn.textContent='Play';
+      playPauseBtn.textContent = 'Play';
+      stopLoops();
     }
   }
 
-  function formatTime(sec){ return isFinite(sec) ? sec.toFixed(3) : '0.000'; }
-  function updateSeekUI(){
-    if(sourceMode!=='video') return;
-    const dur=webcam.duration||0;
-    const t=webcam.currentTime||0;
-    const max=1000;
-    seekBar.value = String(dur>0 ? Math.round((t/dur)*max) : 0);
-    timeLabel.textContent = `${formatTime(t)} / ${formatTime(dur)}`;
-  }
-  function seekToBarValue(){
-    const dur=webcam.duration||0;
-    if(dur<=0) return;
-    const v=Number(seekBar.value||0);
-    webcam.currentTime = Math.min(dur, Math.max(0,(v/1000)*dur));
-    updateSeekUI();
-  }
-  function frameStep(deltaFrames){
-    if(sourceMode!=='video') return;
-    if(!webcam.paused){ webcam.pause(); playPauseBtn.textContent='Play'; }
-    const assumedFps=Math.max(10,Math.min(1000,Number(assumedFpsEl.value||240)));
-    const stepFrames=Math.max(1,Number(frameStepModeEl.value||1));
-    const dt=(deltaFrames*stepFrames)/assumedFps;
-    const dur=webcam.duration||0;
-    webcam.currentTime = Math.min(dur||Infinity, Math.max(0,(webcam.currentTime||0)+dt));
-    updateSeekUI();
-  }
-  function skipSeconds(ds){
-    if(sourceMode!=='video') return;
-    if(!webcam.paused){ webcam.pause(); playPauseBtn.textContent='Play'; }
-    const dur=webcam.duration||0;
-    webcam.currentTime = Math.min(dur||Infinity, Math.max(0,(webcam.currentTime||0)+ds));
-    updateSeekUI();
+  // ============================================================
+  // Analysis
+  // ============================================================
+  function analyzePerFrame(kps, tNowMs) {
+    const subject = {
+      sex: subjectSexEl.value,
+      age: parseFloat(subjectAgeEl.value || '0'),
+      mass: parseFloat(subjectMassEl.value || '0'),
+      height: parseFloat(subjectHeightEl.value || '0')
+    };
+
+    const m = viewMode();
+    const T = thr();
+
+    const get = (i) => (kps[i] && kps[i].score > 0.35) ? kps[i] : null;
+
+    const nose = get(0);
+    const hipL = get(11), hipR = get(12);
+    const kneeL = get(13), kneeR = get(14);
+    const ankleL = get(15), ankleR = get(16);
+
+    if (!ankleL && !ankleR) return;
+
+    const pxToCm = estimatePxToCm(nose, ankleL, ankleR, subject.height);
+
+    // Pelvic tilt
+    const pelvicTiltDeg = computePelvicTiltDeg(hipL, hipR);
+    document.getElementById('pelvicTilt').innerHTML = `${pelvicTiltDeg.toFixed(1)}<span class="metric-unit">°</span>`;
+    if (pelvicTiltDeg > T.pelvicCrit) addIssue('critical', 'Excessive lateral pelvic tilt', 'collapser');
+    else if (pelvicTiltDeg > T.pelvicWarn) addIssue('warning', 'Lateral pelvic tilt elevated', 'collapser');
+
+    // VO
+    const hipMidY = midY(hipL, hipR);
+    if (hipMidY != null && pxToCm) {
+      const voCm = updateVerticalOscillation(hipMidY, pxToCm);
+      document.getElementById('vertOsc').innerHTML = `${voCm.toFixed(1)}<span class="metric-unit">cm</span>`;
+      if (voCm > T.voCrit) addIssue('critical', 'Excessive vertical oscillation (VO)', 'bouncer');
+      else if (voCm > T.voWarn) addIssue('warning', 'High vertical oscillation (VO)', 'bouncer');
+    }
+
+    // Knee angles
+    const kneeDegL = (hipL && kneeL && ankleL) ? calculateAngle(hipL, kneeL, ankleL) : null;
+    const kneeDegR = (hipR && kneeR && ankleR) ? calculateAngle(hipR, kneeR, ankleR) : null;
+
+    // Frontal knee drift proxy + crossover gait (live)
+    if (m === 'frontal') {
+      const drift = computeKneeMedialDriftProxyDeg(hipL, kneeL, ankleL, hipR, kneeR, ankleR);
+      modeMetricValue.textContent = `${drift.toFixed(1)}°`;
+
+      const xover = computeCrossoverGait(hipL, hipR, ankleL, ankleR);
+      if (xover.level !== 'None') {
+        addIssue(xover.level === 'High' ? 'critical' : 'warning', `Crossover gait tendency (${xover.level})`, 'crosser');
+      }
+    }
+
+    // Per-foot gait detection
+    handleFoot('L', tNowMs, ankleL, hipL, hipR, kneeDegL, pelvicTiltDeg, pxToCm, m);
+    handleFoot('R', tNowMs, ankleR, hipL, hipR, kneeDegR, pelvicTiltDeg, pxToCm, m);
+
+    updatePhaseUI(gait.feet.L.contact, gait.feet.R.contact);
+    updateCadenceUI();
+    updateRollingUI();
+
+    exportBtn.disabled = gait.steps.length === 0;
   }
 
-  function toggleRecording(){
+  function handleFoot(side, tNow, ankle, hipL, hipR, kneeDeg, pelvicTiltDeg, pxToCm, mode) {
+    const f = gait.feet[side];
+    if (!ankle) return;
+
+    // Ground baseline follows slowly
+    const alpha = 0.05;
+    if (f.groundY == null) f.groundY = ankle.y;
+    f.groundY = (1 - alpha) * f.groundY + alpha * Math.max(f.groundY, ankle.y);
+
+    // Hysteresis for contact
+    const thrOn = 18, thrOff = 26;
+    const dist = f.groundY - ankle.y;
+
+    let contactNow = f.contact;
+    if (!f.contact && dist < thrOn) contactNow = true;
+    if (f.contact && dist > thrOff) contactNow = false;
+
+    // v & a
+    const dt = Math.max(1e-3, (tNow - f.prev.t) / 1000);
+    const vY = (f.prev.ok) ? (ankle.y - f.prev.y) / dt : 0;
+    const aY = (dt > 0) ? (vY - (f.prevVY || 0)) / dt : 0;
+    f.prevVY = vY;
+
+    const ic = (!f.contact && contactNow && vY > -400);
+    const to = (f.contact && !contactNow);
+
+    if (ic) onInitialContact(side, tNow, ankle, hipL, hipR, pxToCm, mode);
+    if (f.active && f.active.inStance) {
+      if (typeof kneeDeg === 'number') f.active.samples.push({ t: tNow, kneeDeg });
+      f.active.pelvicTiltMaxDeg = Math.max(f.active.pelvicTiltMaxDeg, pelvicTiltDeg);
+
+      // GRF curve proxy
+      const decel = Math.max(0, -aY);
+      const bw = mapDecelProxyToBW(decel);
+      const tRelMs = tNow - f.active.tIC_ms;
+
+      if ((f.active.grfCurve.length === 0) || (tRelMs - f.active.grfCurve[f.active.grfCurve.length - 1].tRelMs >= 8)) {
+        f.active.grfCurve.push({ tRelMs, bw });
+      }
+
+      const earlyWindowMs = 140;
+      if (tRelMs <= earlyWindowMs) {
+        if (decel > f.active.grfProxy.peak) {
+          f.active.grfProxy.peak = decel;
+          f.active.grfProxy.tPeak = tNow;
+        }
+      }
+    }
+
+    if (to) onToeOff(side, tNow);
+
+    f.contact = contactNow;
+    f.prev = { t: tNow, x: ankle.x, y: ankle.y, ok: true };
+  }
+
+  function onInitialContact(side, tIC, ankle, hipL, hipR, pxToCm, mode) {
+    if (!isRecording) return;
+
+    const f = gait.feet[side];
+    const T = thr();
+
+    // debounce
+    const minICGapMs = 220;
+    if (f.lastIC && (tIC - f.lastIC) < minICGapMs) return;
+
+    const hipMidX = midX(hipL, hipR);
+
+    // fill swing time (TO -> this IC)
+    const lastSame = findLastStepOfSide(side);
+    if (lastSame && typeof lastSame.tTO_ms === 'number' && typeof lastSame.swingTimeS !== 'number') {
+      lastSame.swingTimeS = (tIC - lastSame.tTO_ms) / 1000;
+    }
+
+    // stride proxy from hipMidX between same-side ICs
+    if (pxToCm && f.lastIC_hipX != null && hipMidX != null) {
+      const strideCm = Math.abs(hipMidX - f.lastIC_hipX) * pxToCm;
+      if (lastSame && typeof lastSame.strideCm !== 'number') lastSame.strideCm = strideCm;
+    }
+
+    // start active stance record
+    f.active = {
+      side,
+      tIC_ms: tIC,
+      tTO_ms: null,
+      inStance: true,
+      stanceTimeS: null,
+      swingTimeS: null,
+      strideCm: null,
+      kneeMidStanceDeg: null,
+      pelvicTiltMaxDeg: 0,
+      samples: [],
+      grfProxy: { peak: 0, tPeak: null },
+      grfCurve: [],
+      overstrideLevel: null,
+      landingQuality: null,
+      grfPeakBW: null,
+      grfTimeToPeakMs: null,
+      notes: ''
+    };
+
+    // overstride (sagittal)
+    if (mode === 'sagittal') {
+      const over = computeOverstrideRisk(hipMidX, ankle, canvas.height || 1, T);
+      f.active.overstrideLevel = over.level;
+      modeMetricValue.textContent = over.level;
+
+      if (over.level === 'High') addIssue('critical', `${side}: Overstriding at IC`, 'overstrider');
+      else if (over.level === 'Moderate') addIssue('warning', `${side}: Moderate overstride at IC`, 'overstrider');
+    }
+
+    gait.icTimes.push(tIC);
+    if (gait.icTimes.length > 12) gait.icTimes.shift();
+
+    f.lastIC = tIC;
+    f.lastIC_hipX = (hipMidX != null) ? hipMidX : null;
+
+    setPhaseIndicator(1);
+  }
+
+  function onToeOff(side, tTO) {
+    if (!isRecording) return;
+
+    const f = gait.feet[side];
+    if (!f.active || !f.active.inStance) return;
+
+    f.active.tTO_ms = tTO;
+    f.active.inStance = false;
+    f.active.stanceTimeS = (tTO - f.active.tIC_ms) / 1000;
+
+    f.active.kneeMidStanceDeg = computeKneeMidStance(f.active.samples, f.active.tIC_ms, tTO);
+
+    const tPeak = f.active.grfProxy.tPeak;
+    const ttpMs = (tPeak != null) ? Math.max(0, tPeak - f.active.tIC_ms) : null;
+    f.active.grfTimeToPeakMs = ttpMs;
+
+    const grfBW = mapDecelProxyToBW(f.active.grfProxy.peak);
+    f.active.grfPeakBW = grfBW;
+    f.active.landingQuality = classifyLanding(grfBW, ttpMs);
+
+    // issues
+    if (typeof f.active.kneeMidStanceDeg === 'number' && f.active.kneeMidStanceDeg > 165) {
+      addIssue('warning', `${side}: Low mid-stance knee flexion`, 'generic');
+      f.active.notes += 'Low mid-stance knee flexion; ';
+    }
+    if (f.active.pelvicTiltMaxDeg > thr().pelvicWarn) {
+      addIssue('warning', `${side}: Pelvic tilt elevated in stance`, 'collapser');
+      f.active.notes += 'Pelvic tilt elevated; ';
+    }
+    if (f.active.landingQuality === 'Hard') {
+      addIssue('warning', `${side}: Hard landing tendency (GRF proxy)`, 'generic');
+      f.active.notes += 'Hard landing tendency; ';
+    }
+
+    updateLastStepCards(f.active);
+    finalizeStep(f.active);
+
+    f.active = null;
+    f.lastTO = tTO;
+
+    setPhaseIndicator(3);
+  }
+
+  function computeKneeMidStance(samples, tIC, tTO) {
+    if (!samples || !samples.length) return null;
+    const target = tIC + 0.5 * (tTO - tIC);
+    let best = null, bestDt = Infinity;
+    for (const s of samples) {
+      const dt = Math.abs(s.t - target);
+      if (dt < bestDt) { bestDt = dt; best = s.kneeDeg; }
+    }
+    return (typeof best === 'number') ? best : null;
+  }
+
+  function updateLastStepCards(step) {
+    if (step.side === 'L') {
+      document.getElementById('kneeMSL').innerHTML = `${(step.kneeMidStanceDeg ?? 0).toFixed(0)}<span class="metric-unit">°</span>`;
+    } else {
+      document.getElementById('kneeMSR').innerHTML = `${(step.kneeMidStanceDeg ?? 0).toFixed(0)}<span class="metric-unit">°</span>`;
+    }
+    document.getElementById('grfPeak').innerHTML = `${(step.grfPeakBW ?? 0).toFixed(2)}<span class="metric-unit">BW</span>`;
+    document.getElementById('grfTTP').innerHTML = `${(step.grfTimeToPeakMs ?? 0).toFixed(0)}<span class="metric-unit">ms</span>`;
+  }
+
+  function finalizeStep(step) {
+    const row = {
+      idx: gait.steps.length + 1,
+      side: step.side,
+      tIC_ms: step.tIC_ms,
+      tTO_ms: step.tTO_ms,
+      stanceTimeS: step.stanceTimeS,
+      swingTimeS: step.swingTimeS,
+      strideCm: step.strideCm,
+      kneeMidStanceDeg: step.kneeMidStanceDeg,
+      pelvicTiltMaxDeg: step.pelvicTiltMaxDeg,
+      grfPeakBW: step.grfPeakBW,
+      grfTimeToPeakMs: step.grfTimeToPeakMs,
+      landingQuality: step.landingQuality,
+      overstrideLevel: step.overstrideLevel,
+      grfCurve: step.grfCurve || [],
+      notes: (step.notes || '').trim()
+    };
+    gait.steps.push(row);
+
+    // Update charts often enough so it feels live
+    if (gait.steps.length >= 2) updateChartsFromSteps();
+    else rebuildStepPicker();
+
+    stepPicker.value = String(row.idx);
+    renderSelectedGRFCurve();
+  }
+
+  function findLastStepOfSide(side) {
+    for (let i = gait.steps.length - 1; i >= 0; i--) {
+      if (gait.steps[i].side === side) return gait.steps[i];
+    }
+    return null;
+  }
+
+  // ============================================================
+  // Phase + cadence + rolling stats
+  // ============================================================
+  function updatePhaseUI(L_contact, R_contact) {
+    let label = 'Standing', dot = 1;
+    if (L_contact && R_contact) { label = 'Double Support'; dot = 2; }
+    else if (L_contact && !R_contact) { label = 'Right Swing'; dot = 4; }
+    else if (!L_contact && R_contact) { label = 'Left Swing'; dot = 4; }
+    else if (!L_contact && !R_contact) { label = 'Flight / Both Swing'; dot = 4; }
+    document.getElementById('gaitPhase').textContent = label;
+    setPhaseIndicator(dot);
+  }
+
+  function updateCadenceUI() {
+    const t = gait.icTimes;
+    if (t.length < 4) return;
+    const slice = t.slice(-8);
+    const deltas = [];
+    for (let i = 1; i < slice.length; i++) deltas.push((slice[i] - slice[i-1]) / 1000);
+    const avg = deltas.reduce((a,b)=>a+b,0) / deltas.length;
+    const cadence = avg > 0 ? Math.round(60 / avg) : 0;
+
+    document.getElementById('cadence').innerHTML = `${cadence}<span class="metric-unit">steps/min</span>`;
+    if (cadence > 0 && cadence < 160) addIssue('warning', 'Low cadence - consider increasing step rate', 'generic');
+  }
+
+  function updateRollingUI() {
+    const steps = gait.steps;
+    if (!steps.length) return;
+    const slice = steps.slice(-gait.recentWindow);
+
+    const nums = (k) => slice.map(s => s[k]).filter(v => typeof v === 'number' && isFinite(v));
+    const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+
+    const stanceAvg = mean(nums('stanceTimeS'));
+    const swingAvg = mean(nums('swingTimeS'));
+    const strideAvg = mean(nums('strideCm'));
+
+    document.getElementById('stanceTime').innerHTML = `${stanceAvg.toFixed(2)}<span class="metric-unit">s</span>`;
+    document.getElementById('swingTime').innerHTML = `${swingAvg.toFixed(2)}<span class="metric-unit">s</span>`;
+    document.getElementById('strideLength').innerHTML = `${strideAvg.toFixed(0)}<span class="metric-unit">cm</span>`;
+  }
+
+  // ============================================================
+  // VO + Pelvic + Frontal drift + Crossover
+  // ============================================================
+  function updateVerticalOscillation(hipMidY, pxToCm) {
+    const vo = gait.vo;
+    const alpha = 0.02;
+    if (vo.baselineY == null) vo.baselineY = hipMidY;
+    vo.baselineY = (1 - alpha) * vo.baselineY + alpha * hipMidY;
+
+    const devPx = Math.abs(hipMidY - vo.baselineY);
+    vo.maxDevPx = Math.max(vo.maxDevPx, devPx);
+    vo.windowFrames++;
+
+    if (vo.windowFrames >= 30) {
+      vo.lastVOcm = vo.maxDevPx * pxToCm;
+      vo.maxDevPx = 0;
+      vo.windowFrames = 0;
+    }
+    return vo.lastVOcm;
+  }
+
+  function computePelvicTiltDeg(hipL, hipR) {
+    if (!hipL || !hipR) return 0;
+    const dy = (hipR.y - hipL.y);
+    const dx = (hipR.x - hipL.x) || 1;
+    return Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+  }
+
+  function computeKneeMedialDriftProxyDeg(hipL, kneeL, ankleL, hipR, kneeR, ankleR) {
+    const ang = (hip, knee, ankle) => {
+      if (!hip || !knee || !ankle) return null;
+      const ax = (hip.x - knee.x) * 1.5, ay = (hip.y - knee.y);
+      const bx = (ankle.x - knee.x) * 1.5, by = (ankle.y - knee.y);
+      const dot = ax*bx + ay*by;
+      const na = Math.hypot(ax, ay) || 1;
+      const nb = Math.hypot(bx, by) || 1;
+      const cos = Math.max(-1, Math.min(1, dot/(na*nb)));
+      return Math.acos(cos) * 180 / Math.PI;
+    };
+
+    const aL = ang(hipL, kneeL, ankleL);
+    const aR = ang(hipR, kneeR, ankleR);
+
+    const driftL = (aL != null) ? Math.max(0, 180 - aL) : null;
+    const driftR = (aR != null) ? Math.max(0, 180 - aR) : null;
+
+    const vals = [driftL, driftR].filter(v => typeof v === 'number');
+    const max = vals.length ? Math.max(...vals) : 0;
+
+    if (max > 18) addIssue('critical', 'Frontal: High knee medial drift (valgus proxy)', 'generic');
+    else if (max > 12) addIssue('warning', 'Frontal: Moderate knee medial drift (valgus proxy)', 'generic');
+
+    return max;
+  }
+
+  function computeCrossoverGait(hipL, hipR, ankleL, ankleR) {
+    if (!hipL || !hipR) return { level: 'None', score: 0 };
+    const mid = (hipL.x + hipR.x) / 2;
+    const hipW = Math.abs(hipR.x - hipL.x) || 1;
+
+    let score = 0;
+    // L foot crossing midline means L ankle is to the RIGHT of mid by some margin
+    if (ankleL && ankleL.score > 0.35) score = Math.max(score, (ankleL.x - mid) / hipW);
+    // R foot crossing midline means R ankle is to the LEFT of mid by some margin
+    if (ankleR && ankleR.score > 0.35) score = Math.max(score, (mid - ankleR.x) / hipW);
+
+    const T = thr();
+    if (score > T.xoverCrit) return { level: 'High', score };
+    if (score > T.xoverWarn) return { level: 'Moderate', score };
+    return { level: 'None', score };
+  }
+
+  // ============================================================
+  // GRF proxy
+  // ============================================================
+  function mapDecelProxyToBW(p) {
+    const x = Math.max(0, Math.min(p, 20000));
+    return 1.2 + 1.8 * (1 - Math.exp(-x / 6000)); // asymptote ~3.0
+  }
+
+  function classifyLanding(grfBW, ttpMs) {
+    if (ttpMs == null) return 'Moderate';
+    if (grfBW >= 2.6 && ttpMs <= 70) return 'Hard';
+    if (grfBW <= 2.0 && ttpMs >= 110) return 'Soft';
+    return 'Moderate';
+  }
+
+  // ============================================================
+  // Geometry helpers
+  // ============================================================
+  function estimatePxToCm(nose, ankleL, ankleR, heightCm) {
+    if (!heightCm || !nose || (!ankleL && !ankleR)) return null;
+    const lowestAnkleY = Math.max(ankleL ? ankleL.y : 0, ankleR ? ankleR.y : 0);
+    const bodyPx = Math.abs(lowestAnkleY - nose.y);
+    if (bodyPx < 50) return null;
+    return heightCm / bodyPx;
+  }
+
+  function midX(a, b) {
+    if (a && b) return (a.x + b.x) / 2;
+    if (a) return a.x;
+    if (b) return b.x;
+    return null;
+  }
+  function midY(a, b) {
+    if (a && b) return (a.y + b.y) / 2;
+    if (a) return a.y;
+    if (b) return b.y;
+    return null;
+  }
+
+  function computeOverstrideRisk(hipMidX, ankle, bodyHeightPx, T) {
+    if (hipMidX == null || !ankle) return { level: 'Low', ratio: 0 };
+    const denom = Math.max(1, bodyHeightPx || 1);
+    const ratio = Math.abs(ankle.x - hipMidX) / denom;
+
+    let level = 'Low';
+    if (ratio > T.overHigh) level = 'High';
+    else if (ratio > T.overMod) level = 'Moderate';
+
+    return { level, ratio };
+  }
+
+  function calculateAngle(a, b, c) {
+    const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+    let angle = Math.abs(radians * 180 / Math.PI);
+    if (angle > 180) angle = 360 - angle;
+    return angle;
+  }
+
+  // ============================================================
+  // Issues list (with labels)
+  // ============================================================
+  function addIssue(severity, message, tagType='generic') {
+    const key = `${severity}:${tagType}:${message}`;
+    if (detectedIssues.has(key)) return;
+
+    detectedIssues.add(key);
+    const issuesList = document.getElementById('issuesList');
+    if (detectedIssues.size === 1) issuesList.innerHTML = '';
+
+    const div = document.createElement('div');
+    div.className = 'issue-item ' + severity;
+
+    const tag = document.createElement('span');
+    tag.className = 'tag ' + (tagType || 'generic');
+    tag.textContent =
+      (tagType === 'overstrider') ? 'OVERSTRIDER' :
+      (tagType === 'bouncer') ? 'BOUNCER' :
+      (tagType === 'collapser') ? 'COLLAPSER' :
+      (tagType === 'crosser') ? 'CROSSER' :
+      'ISSUE';
+
+    const text = document.createElement('div');
+    text.textContent = message;
+
+    div.appendChild(tag);
+    div.appendChild(text);
+
+    issuesList.insertBefore(div, issuesList.firstChild);
+
+    while (issuesList.children.length > 6) issuesList.removeChild(issuesList.lastChild);
+
+    setTimeout(() => detectedIssues.delete(key), 6500);
+  }
+
+  // ============================================================
+  // Recording (FIXED button text + stop behavior)
+  // ============================================================
+  function toggleRecording() {
     isRecording = !isRecording;
     setRecordButtonUI();
-    if(isRecording){
+
+    if (isRecording) {
       resetGaitAll();
-      exportBtn.disabled=true;
-      setStatus('ready','🔴 Recording… (steps will populate charts once analysis is added back)');
+      exportBtn.disabled = true;
+      setStatus('ready', '🔴 Recording per-step metrics…');
     } else {
-      exportBtn.disabled = gait.steps.length===0;
+      exportBtn.disabled = gait.steps.length === 0;
       setStatus('ready', `✓ Recording stopped — ${gait.steps.length} steps captured`);
-      if (strideChart) updateChartsFromSteps();
+      updateChartsFromSteps();
     }
   }
 
-  // Placeholder drawing to prove canvas works even before full analysis
-  function drawSkeleton(){}
+  // ============================================================
+  // Snapshot PNG
+  // ============================================================
+  async function exportSnapshotPNG() {
+    if (!(sourceMode === 'camera' || sourceMode === 'video')) {
+      alert('No active source.');
+      return;
+    }
+    const w = canvas.width || webcam.videoWidth;
+    const h = canvas.height || webcam.videoHeight;
+    if (!w || !h) { alert('Video not ready yet.'); return; }
+
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const octx = out.getContext('2d');
+
+    octx.drawImage(webcam, 0, 0, w, h);
+    octx.drawImage(canvas, 0, 0, w, h);
+
+    const filename = `gait_snapshot_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.png`;
+    out.toBlob(async (blob) => {
+      if (!blob) return alert('Snapshot failed');
+      setStatus('ready', 'Saving snapshot…');
+      await saveFile(blob, filename, 'image/png');
+      setStatus('ready', '✓ Snapshot exported (iPhone: Share → Save to Files)');
+    }, 'image/png');
+  }
+
+  // ============================================================
+  // XLSX export
+  // ============================================================
+  async function exportToXLSX() {
+    if (!gait.steps.length) return alert('No steps to export. Record first.');
+
+    const subject = {
+      sex: subjectSexEl.value,
+      age: parseFloat(subjectAgeEl.value || '0'),
+      mass: parseFloat(subjectMassEl.value || '0'),
+      height: parseFloat(subjectHeightEl.value || '0')
+    };
+
+    const filename = `gait_steps_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.xlsx`;
+    const wb = XLSX.utils.book_new();
+
+    const subjectSheetData = [
+      ['Gait Biodynamics Lab - Per-Step Report'],
+      ['Date', new Date().toLocaleString()],
+      ['Source', sourceMode],
+      ['View Mode', viewMode()],
+      ['Sex', subject.sex],
+      ['Age (years)', subject.age],
+      ['Mass (kg)', subject.mass],
+      ['Height (cm)', subject.height],
+      ['Copyright', '© 2025 Ng Jun Wei. All rights reserved.'],
+      ['Notes', 'Knee mid-stance = knee angle near 50% stance. GRF proxy curve = BW proxy over stance from ankle vertical decel. VO from hip-mid baseline. Height used for pixel→cm calibration (approx).']
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(subjectSheetData), 'Subject');
+
+    const rows = gait.steps.map(s => ({
+      'Step #': s.idx,
+      'Side': s.side,
+      'IC Time (ms)': Math.round(s.tIC_ms),
+      'TO Time (ms)': (typeof s.tTO_ms === 'number') ? Math.round(s.tTO_ms) : '',
+      'Stance Time (s)': (typeof s.stanceTimeS === 'number') ? Number(s.stanceTimeS.toFixed(3)) : '',
+      'Swing Time (s)': (typeof s.swingTimeS === 'number') ? Number(s.swingTimeS.toFixed(3)) : '',
+      'Stride Length (cm)': (typeof s.strideCm === 'number') ? Number(s.strideCm.toFixed(1)) : '',
+      'Knee Flexion Mid-Stance (°)': (typeof s.kneeMidStanceDeg === 'number') ? Number(s.kneeMidStanceDeg.toFixed(1)) : '',
+      'Pelvic Tilt Max (°)': (typeof s.pelvicTiltMaxDeg === 'number') ? Number(s.pelvicTiltMaxDeg.toFixed(2)) : '',
+      'GRF Peak (BW, proxy)': (typeof s.grfPeakBW === 'number') ? Number(s.grfPeakBW.toFixed(2)) : '',
+      'GRF Time-to-Peak (ms, proxy)': (typeof s.grfTimeToPeakMs === 'number') ? Number(s.grfTimeToPeakMs.toFixed(0)) : '',
+      'Landing Quality': s.landingQuality || '',
+      'Overstride Level (sagittal)': s.overstrideLevel || '',
+      'Notes': s.notes || ''
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Steps');
+
+    const curveRows = [];
+    for (const s of gait.steps) {
+      if (!s.grfCurve || !s.grfCurve.length) continue;
+      for (const p of s.grfCurve) {
+        curveRows.push({
+          'Step #': s.idx,
+          'Side': s.side,
+          't_from_IC_ms': Math.round(p.tRelMs),
+          'GRF_proxy_BW': Number(p.bw.toFixed(3))
+        });
+      }
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(curveRows), 'GRF_Curves');
+
+    const arrayBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    setStatus('ready', 'Preparing XLSX…');
+    await saveFile(blob, filename, blob.type);
+    setStatus('ready', '✓ XLSX exported (iPhone: Share → Save to Files)');
+  }
+
+  async function saveFile(blob, filename, mime) {
+    const canShare = !!(navigator.canShare && navigator.share);
+
+    if (isIOS && canShare) {
+      try {
+        const file = new File([blob], filename, { type: mime });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: filename, text: 'Exported from Gait Biodynamics Lab' });
+          return true;
+        }
+      } catch (_) {}
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  }
+
+  // ============================================================
+  // Video seek + frame stepping
+  // ============================================================
+  function formatTime(sec) { return isFinite(sec) ? sec.toFixed(3) : '0.000'; }
+
+  function updateSeekUI() {
+    if (sourceMode !== 'video') return;
+    const dur = webcam.duration || 0;
+    const t = webcam.currentTime || 0;
+    const v = dur > 0 ? Math.round((t / dur) * 1000) : 0;
+    seekBar.value = String(v);
+    timeLabel.textContent = `${formatTime(t)} / ${formatTime(dur)}`;
+  }
+
+  function seekToBarValue() {
+    const dur = webcam.duration || 0;
+    if (dur <= 0) return;
+    const v = Number(seekBar.value || 0);
+    const t = (v / 1000) * dur;
+    webcam.currentTime = Math.min(dur, Math.max(0, t));
+    updateSeekUI();
+    loopPose(webcam.currentTime * 1000);
+  }
+
+  function frameStep(deltaFrames) {
+    if (sourceMode !== 'video') return;
+    if (!webcam.paused) { webcam.pause(); playPauseBtn.textContent='Play'; stopLoops(); }
+    const assumedFps = Math.max(10, Math.min(1000, Number(assumedFpsEl.value || 240)));
+    const stepFrames = Math.max(1, Number(frameStepModeEl.value || 1));
+    const dt = (deltaFrames * stepFrames) / assumedFps;
+    const dur = webcam.duration || 0;
+    webcam.currentTime = Math.min(dur || Infinity, Math.max(0, (webcam.currentTime || 0) + dt));
+    updateSeekUI();
+    loopPose(webcam.currentTime * 1000);
+  }
+
+  function skipSeconds(ds) {
+    if (sourceMode !== 'video') return;
+    if (!webcam.paused) { webcam.pause(); playPauseBtn.textContent='Play'; stopLoops(); }
+    const dur = webcam.duration || 0;
+    webcam.currentTime = Math.min(dur || Infinity, Math.max(0, (webcam.currentTime || 0) + ds));
+    updateSeekUI();
+    loopPose(webcam.currentTime * 1000);
+  }
 
   // ============================================================
   // Events
   // ============================================================
   startCamBtn.addEventListener('click', startCamera);
-  loadVideoBtn.addEventListener('click', ()=>videoFile.click());
-  videoFile.addEventListener('change', async (e)=>{
-    const file=e.target.files?.[0];
-    if(!file) return;
+
+  loadVideoBtn.addEventListener('click', () => videoFile.click());
+  videoFile.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     await loadVideoFile(file);
-    videoFile.value='';
+    videoFile.value = '';
   });
 
   playPauseBtn.addEventListener('click', togglePlayPause);
   stopBtn.addEventListener('click', stopAll);
 
   recordBtn.addEventListener('click', toggleRecording);
+  exportBtn.addEventListener('click', exportToXLSX);
+  snapshotBtn.addEventListener('click', exportSnapshotPNG);
 
   viewModeEl.addEventListener('change', syncModeUI);
-  seekBar.addEventListener('input', ()=>{ if(sourceMode==='video') seekToBarValue(); });
-  webcam.addEventListener('timeupdate', updateSeekUI);
-  webcam.addEventListener('loadedmetadata', updateSeekUI);
-  webcam.addEventListener('durationchange', updateSeekUI);
 
-  stepBackBtn.addEventListener('click', ()=>frameStep(-1));
-  stepFwdBtn.addEventListener('click', ()=>frameStep(+1));
-  skipBackBtn.addEventListener('click', ()=>skipSeconds(-0.1));
-  skipFwdBtn.addEventListener('click', ()=>skipSeconds(+0.1));
+  seekBar.addEventListener('input', () => { if (sourceMode === 'video') seekToBarValue(); });
+  webcam.addEventListener('timeupdate', () => updateSeekUI());
+  webcam.addEventListener('loadedmetadata', () => updateSeekUI());
+  webcam.addEventListener('durationchange', () => updateSeekUI());
+
+  stepBackBtn.addEventListener('click', () => frameStep(-1));
+  stepFwdBtn.addEventListener('click', () => frameStep(+1));
+  skipBackBtn.addEventListener('click', () => skipSeconds(-0.1));
+  skipFwdBtn.addEventListener('click', () => skipSeconds(+0.1));
 
   stepPicker.addEventListener('change', renderSelectedGRFCurve);
 
   // ============================================================
-  // Boot (with retry)
+  // Boot
   // ============================================================
   async function boot(isRetry=false){
-    try{
+    try {
       initFallback.style.display='none';
-      setStatus('loading','<span class="loading-spinner"></span> Initializing…');
+      setStatus('loading', '<span class="loading-spinner"></span> Loading AI model…');
       await initModel();
 
-      stopBtn.disabled=true;
-      recordBtn.disabled=true;
-      exportBtn.disabled=true;
-      snapshotBtn.disabled=true;
-      playPauseBtn.disabled=true;
+      stopBtn.disabled = true;
+      recordBtn.disabled = true;
+      exportBtn.disabled = true;
+      snapshotBtn.disabled = true;
+      playPauseBtn.disabled = true;
 
-      isInited=true;
-    }catch(e){
-      console.error(e);
+      // Ensure record button is correct on load
+      isRecording = false;
+      setRecordButtonUI();
+    } catch (e) {
       initFallback.style.display='flex';
-      setStatus('error','✗ Init Error: ' + (e?.message||e) + '<br>Try Force WebGL or Force CPU.');
+      setStatus('error', '✗ Init Error: ' + (e?.message || e) + '<br>Try Force WebGL or Force CPU.');
+      console.error(e);
     }
   }
 
-  // Start init
+  // Init watchdog controls
+  function armInitWatchdog(){
+    clearTimeout(initWatchdog);
+    initWatchdog = setTimeout(()=>{
+      initFallback.style.display='flex';
+      setStatus('error','⚠️ Init is taking too long.<br>Tap <b>Force WebGL</b> or <b>Force CPU</b>.');
+    }, 9000);
+  }
+  function disarmInitWatchdog(){ clearTimeout(initWatchdog); initWatchdog=null; }
+
+  // Kick off
   boot(false);
 </script>
 </body>
