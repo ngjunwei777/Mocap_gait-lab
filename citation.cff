@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 authors:
-  - family-names: Ng
-    given-names: Jun Wei
+  - family-names: Ng, Koh
+    given-names: Jun Wei, Terence
     orcid: https://orcid.org/my-orcid?orcid=0000-0001-8634-1938
 title: "Gait Analysis"
 version: 2.0.1
