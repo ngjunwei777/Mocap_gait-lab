@@ -109,6 +109,7 @@
       font-weight:700;
       font-size:13px;
       z-index:10;
+      white-space: nowrap;
     }
 
     .controls { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
@@ -240,23 +241,15 @@
       padding: 12px;
       display: none;
     }
-    .vc-row {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-    }
+    .vc-row { display: grid; grid-template-columns: 1fr; gap: 10px; }
     .seek-row {
       display: grid;
-      grid-template-columns: 90px 1fr 140px;
+      grid-template-columns: 90px 1fr 160px;
       gap: 10px;
       align-items: center;
     }
     input[type="range"] { width: 100%; }
-    .vc-buttons {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+    .vc-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
     .vc-buttons button {
       min-width: 140px;
       flex: 1;
@@ -285,13 +278,6 @@
       outline: none;
       width: 100%;
     }
-
-    footer {
-      margin-top: 18px;
-      text-align: center;
-      color: rgba(255,255,255,0.9);
-      font-size: 12px;
-    }
   </style>
 </head>
 
@@ -299,7 +285,8 @@
 <div class="container">
   <h1>🏃 Gait Biodynamics Lab</h1>
   <p class="subtitle">
-    Camera (set 120fps) + Upload High-FPS Video (e.g., 240fps) • Seek + Frame-step • Per-step GRF-time proxy curves</p>
+    Camera (set 120fps) + Upload High-FPS Video • Seek + Frame-step • Per-step GRF-time proxy curves • Application is developed by Ng Jun Wei
+  </p>
 
   <div id="status" class="status loading"><span class="loading-spinner"></span> Initializing…</div>
 
@@ -312,8 +299,9 @@
           <option value="sagittal" selected>Sagittal (Side View)</option>
           <option value="frontal">Frontal (Front/Back View)</option>
         </select>
-        <div class="hint">Sagittal: overstride + bouncer • Frontal: collapser + crossover.</div>
+        <div class="hint">Sagittal: Overstrider + Bouncer • Frontal: Collapser + Crossover • Both: general warnings.</div>
       </div>
+
       <div>
         <label>Sex</label>
         <select id="subjectSex">
@@ -335,7 +323,7 @@
       </div>
     </div>
     <div class="tiny">
-      Tip: true 240fps is best via uploaded slow-mo video. Browser decoding may deliver fewer frames on some devices, but the seek + frame-step helps review precisely.
+      Tip: For uploaded slow-mo, decoding may not deliver every recorded frame. The analyzer now auto-throttles inference to stay “real-time smooth” while still tracking steps reliably for treadmill running (7–12 km/h).
     </div>
   </div>
 
@@ -369,8 +357,12 @@
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;">
             <div>
               <label>Assumed Video FPS (for frame-step)</label>
-              <input id="assumedFps" type="number" min="10" max="1000" step="1" value="240">
-              <div class="hint">If your video is 120fps “normal”, set to 120. This only affects ±1-frame stepping.</div>
+              <select id="assumedFps">
+                <option value="60" selected>60 fps</option>
+                <option value="120">120 fps</option>
+                <option value="240">240 fps</option>
+              </select>
+              <div class="hint">Used only for ±frame stepping. Default starts at 60fps as requested.</div>
             </div>
             <div>
               <label>Frame Step Size</label>
@@ -379,7 +371,7 @@
                 <option value="2">±2 frames</option>
                 <option value="5">±5 frames</option>
               </select>
-              <div class="hint">Use larger steps if your device lags during scrubbing.</div>
+              <div class="hint">If scrubbing lags, pick ±2 or ±5.</div>
             </div>
           </div>
 
@@ -477,9 +469,9 @@
     </div>
   </div>
 
-  <!-- Charts section: ONLY GRF curve step + deficiency amounts displayed in chart -->
+  <!-- Charts section -->
   <div class="charts-section">
-    <h3>📊 GRF Curve + Deficiency Amount (Selected Step)</h3>
+    <h3>📊 GRF Curve + Deficiency Subscores (Selected Step)</h3>
 
     <div class="chart-container">
       <div class="step-select">
@@ -490,8 +482,8 @@
       </div>
       <canvas id="grfCurveChart"></canvas>
       <div class="tiny">
-        BW curve = GRF proxy. Deficiency overlay shows 4 sub-scores (0–100): Collapser / Overstrider / Bouncer / Crossover.
-        Only relevant sub-scores appear per view (others render as 0).
+        Right axis shows 4 sub-scores (0–100): Collapser / Overstrider / Bouncer / Crossover.
+        Only relevant scores are computed per view (Sagittal: Overstrider+Bouncer; Frontal: Collapser+Crossover). Others are 0.
       </div>
     </div>
   </div>
@@ -570,8 +562,18 @@
   let animId = null;
   let vfcActive = false;
 
+  // FPS display (analysis loop rate)
   let loopFrames = 0;
   let loopFpsT0 = 0;
+
+  // REAL-TIME anti-lag controls (video + camera)
+  let inferenceBusy = false;
+  let pendingTMs = null;
+  let pendingFromSource = null;
+  let lastInferPerfMs = 0;
+  let inferEMAms = 28;          // exponential moving avg inference time
+  let targetInferMs = 45;       // auto adjusts (smaller = more skip, larger = more detail)
+  let minInferIntervalMs = 0;   // dynamic frame skipping (based on infer time)
 
   // ============================================================
   // Per-step gait state (concurrent L/R)
@@ -595,48 +597,18 @@
     steps: [],
     icTimes: [],
     recentWindow: 6,
-    vo: { baselineY: null, maxDevPx: 0, windowFrames: 0, lastVOcm: 0 }
+    vo: { baselineY: null, maxDevPx: 0, windowFrames: 0, lastVOcm: 0 },
+    dynamic: {
+      // auto-adjusted step debounce for treadmill running (7–12 km/h typical cadence)
+      avgStepPeriodMs: 360,
+      minICGapMs: 220
+    }
   };
 
-  // ============================================================
-  // Issues tracking: show general warnings in BOTH views
-  // ============================================================
   let detectedIssues = new Set();
-  let issuesLog = []; // {t, severity, message, tagLabel, viewMode|null}
-  const MAX_ISSUES_RENDER = 6;
-
-  function renderIssuesForCurrentView() {
-    const currentVM = viewMode();
-    const issuesList = document.getElementById('issuesList');
-
-    const filtered = issuesLog.filter(it => it.viewMode === null || it.viewMode === currentVM);
-
-    if (!filtered.length) {
-      issuesList.innerHTML =
-        '<div style="text-align:center; color:#999; padding:18px;">No issues detected yet</div>';
-      return;
-    }
-
-    issuesList.innerHTML = '';
-    for (const it of filtered.slice(0, MAX_ISSUES_RENDER)) {
-      const div = document.createElement('div');
-      div.className = 'issue-item ' + it.severity;
-
-      div.textContent = it.message;
-
-      if (it.tagLabel) {
-        const tag = document.createElement('span');
-        tag.className = 'issue-tag';
-        tag.textContent = it.tagLabel;
-        div.appendChild(tag);
-      }
-
-      issuesList.appendChild(div);
-    }
-  }
 
   // ============================================================
-  // Charts (ONLY GRF chart kept)
+  // Charts
   // ============================================================
   let grfCurveChart;
 
@@ -649,7 +621,7 @@
       plugins: {
         legend: { display: true },
         title: { display: true, text: 'GRF Proxy (BW) vs time from IC' },
-        subtitle: { display: true, text: 'Select a step to view GRF curve + deficiency sub-scores' }
+        subtitle: { display: true, text: 'Select a step to view GRF curve + deficiency subscores' }
       }
     };
 
@@ -658,44 +630,13 @@
       data: {
         labels: [],
         datasets: [
-          {
-            label: 'GRF Proxy (BW)',
-            data: [],
-            tension: 0.25,
-            pointRadius: 0
-          },
-          {
-            label: 'Collapser (0-100)',
-            data: [],
-            tension: 0,
-            pointRadius: 0,
-            yAxisID: 'y2',
-            borderDash: [6, 6]
-          },
-          {
-            label: 'Overstrider (0-100)',
-            data: [],
-            tension: 0,
-            pointRadius: 0,
-            yAxisID: 'y2',
-            borderDash: [6, 6]
-          },
-          {
-            label: 'Bouncer (0-100)',
-            data: [],
-            tension: 0,
-            pointRadius: 0,
-            yAxisID: 'y2',
-            borderDash: [6, 6]
-          },
-          {
-            label: 'Crossover (0-100)',
-            data: [],
-            tension: 0,
-            pointRadius: 0,
-            yAxisID: 'y2',
-            borderDash: [6, 6]
-          }
+          { label: 'GRF Proxy (BW)', data: [], tension: 0.25, pointRadius: 0, yAxisID: 'y' },
+
+          // Right axis: 4 subscores as separate lines (0-100)
+          { label: 'Collapser (0–100)',   data: [], tension: 0, pointRadius: 0, yAxisID: 'y2', borderDash: [4, 4] },
+          { label: 'Overstrider (0–100)', data: [], tension: 0, pointRadius: 0, yAxisID: 'y2', borderDash: [7, 4] },
+          { label: 'Bouncer (0–100)',     data: [], tension: 0, pointRadius: 0, yAxisID: 'y2', borderDash: [10, 4] },
+          { label: 'Crossover (0–100)',   data: [], tension: 0, pointRadius: 0, yAxisID: 'y2', borderDash: [2, 6] }
         ]
       },
       options: {
@@ -724,9 +665,8 @@
     const opts = gait.steps.slice(-200).map(s => {
       const ttp = (typeof s.grfTimeToPeakMs === 'number') ? `${Math.round(s.grfTimeToPeakMs)}ms` : '—';
       const peak = (typeof s.grfPeakBW === 'number') ? s.grfPeakBW.toFixed(2) : '—';
-      const vm = (s.viewModeAtCapture || '').toUpperCase();
-      const tags = (Array.isArray(s.tags) && s.tags.length) ? ` • ${s.tags.join('/')}` : '';
-      return `<option value="${s.idx}">#${s.idx} (${s.side}) ${vm} peak ${peak}BW, TTP ${ttp}${tags}</option>`;
+      const total = (typeof s.deficiencyTotal === 'number') ? `${Math.round(s.deficiencyTotal)}/100` : '—';
+      return `<option value="${s.idx}">#${s.idx} (${s.side}) peak ${peak}BW, TTP ${ttp}, Def ${total}</option>`;
     }).join('');
     stepPicker.innerHTML = opts;
 
@@ -746,10 +686,7 @@
     if (!step || !step.grfCurve || !step.grfCurve.length) {
       grfCurveChart.data.labels = [];
       grfCurveChart.data.datasets[0].data = [];
-      grfCurveChart.data.datasets[1].data = [];
-      grfCurveChart.data.datasets[2].data = [];
-      grfCurveChart.data.datasets[3].data = [];
-      grfCurveChart.data.datasets[4].data = [];
+      for (let i = 1; i <= 4; i++) grfCurveChart.data.datasets[i].data = [];
       grfCurveChart.options.plugins.title.text = 'GRF Proxy (BW) vs time from IC';
       grfCurveChart.options.plugins.subtitle.text = 'No GRF curve for selected step.';
       grfCurveChart.update('none');
@@ -759,11 +696,11 @@
     const labels = step.grfCurve.map(p => String(Math.round(p.tRelMs)));
     const bw = step.grfCurve.map(p => p.bw);
 
-    const subs = step.deficiencySubScores || { collapser: 0, overstrider: 0, bouncer: 0, crossover: 0 };
-    const collLine = step.grfCurve.map(_ => subs.collapser || 0);
-    const overLine = step.grfCurve.map(_ => subs.overstrider || 0);
-    const bouLine  = step.grfCurve.map(_ => subs.bouncer || 0);
-    const croLine  = step.grfCurve.map(_ => subs.crossover || 0);
+    const sub = step.deficiencySub || { collapser:0, overstrider:0, bouncer:0, crossover:0 };
+    const collLine = step.grfCurve.map(_ => sub.collapser || 0);
+    const overLine = step.grfCurve.map(_ => sub.overstrider || 0);
+    const bouLine  = step.grfCurve.map(_ => sub.bouncer || 0);
+    const croLine  = step.grfCurve.map(_ => sub.crossover || 0);
 
     grfCurveChart.data.labels = labels;
     grfCurveChart.data.datasets[0].data = bw;
@@ -772,22 +709,16 @@
     grfCurveChart.data.datasets[3].data = bouLine;
     grfCurveChart.data.datasets[4].data = croLine;
 
-    const vm = (step.viewModeAtCapture || '').toUpperCase();
-    grfCurveChart.options.plugins.title.text = `Step #${step.idx} (${step.side}) — GRF Proxy — ${vm}`;
-
     const bits = [];
-    if (step.viewModeAtCapture === 'sagittal') {
-      if (typeof step.overstrideFSR === 'number') bits.push(`FSR ${step.overstrideFSR.toFixed(2)}`);
-      if (typeof step.voCmAtIC === 'number') bits.push(`VO ${step.voCmAtIC.toFixed(1)}cm`);
-    } else if (step.viewModeAtCapture === 'frontal') {
-      if (typeof step.pelvicTiltMaxDeg === 'number') bits.push(`Pelvic drop ${step.pelvicTiltMaxDeg.toFixed(1)}°`);
-      if (step.crossover === true) bits.push(`Crossover yes`);
-      if (typeof step.stepWidthCmAtIC === 'number') bits.push(`StepW ${step.stepWidthCmAtIC.toFixed(1)}cm`);
-    }
+    if (step.tags?.includes('Overstrider')) bits.push(`FSR ${step.overstrideFSR?.toFixed(2) ?? '—'}`);
+    if (step.tags?.includes('Collapser')) bits.push(`Pelvic drop ${step.pelvicTiltMaxDeg?.toFixed(1) ?? '—'}°`);
+    if (step.tags?.includes('Bouncer')) bits.push(`VO ${step.voCmAtIC?.toFixed(1) ?? '—'}cm`);
+    if (step.tags?.includes('Crossover')) bits.push(`Crossover`);
 
+    const total = (typeof step.deficiencyTotal === 'number') ? Math.round(step.deficiencyTotal) : 0;
+    grfCurveChart.options.plugins.title.text = `Step #${step.idx} (${step.side}) — GRF Proxy`;
     grfCurveChart.options.plugins.subtitle.text =
-      `Coll ${Math.round(subs.collapser||0)} • Over ${Math.round(subs.overstrider||0)} • Bou ${Math.round(subs.bouncer||0)} • Cro ${Math.round(subs.crossover||0)}` +
-      (bits.length ? ` • ${bits.join(' • ')}` : '');
+      `Total deficiency: ${total}/100` + (bits.length ? ` • ${bits.join(' • ')}` : '');
 
     grfCurveChart.update('none');
   }
@@ -838,7 +769,7 @@
   }
 
   // ============================================================
-  // Canvas sizing (helps ensure stick figure is visible)
+  // Canvas sizing
   // ============================================================
   function resizeCanvasToVideo() {
     const w = webcam.videoWidth || 640;
@@ -848,7 +779,7 @@
   }
 
   // ============================================================
-  // Reset state
+  // Reset
   // ============================================================
   function resetGaitAll() {
     gait.feet.L = makeFootState('L');
@@ -856,11 +787,12 @@
     gait.steps = [];
     gait.icTimes = [];
     gait.vo = { baselineY: null, maxDevPx: 0, windowFrames: 0, lastVOcm: 0 };
+    gait.dynamic = { avgStepPeriodMs: 360, minICGapMs: 220 };
 
     detectedIssues = new Set();
-    issuesLog = [];
 
-    renderIssuesForCurrentView();
+    document.getElementById('issuesList').innerHTML =
+      '<div style="text-align:center; color:#999; padding:18px;">No issues detected yet</div>';
 
     document.getElementById('cadence').innerHTML = `0<span class="metric-unit">steps/min</span>`;
     document.getElementById('stanceTime').innerHTML = `0<span class="metric-unit">s</span>`;
@@ -879,9 +811,10 @@
 
     if (grfCurveChart) {
       grfCurveChart.data.labels = [];
-      grfCurveChart.data.datasets.forEach(ds => ds.data = []);
+      grfCurveChart.data.datasets[0].data = [];
+      for (let i = 1; i <= 4; i++) grfCurveChart.data.datasets[i].data = [];
       grfCurveChart.options.plugins.title.text = 'GRF Proxy (BW) vs time from IC';
-      grfCurveChart.options.plugins.subtitle.text = 'Select a step to view GRF curve + deficiency sub-scores';
+      grfCurveChart.options.plugins.subtitle.text = 'Select a step to view GRF curve + deficiency subscores';
       grfCurveChart.update('none');
     }
     rebuildStepPicker();
@@ -906,21 +839,37 @@
     return tf.getBackend();
   }
 
+  async function createDetectorForSource(mode) {
+    // Lag fix: video tends to feel heavier; default to LIGHTNING for video,
+    // THUNDER for camera on non-iOS, but still fall back to LIGHTNING on iOS/Safari.
+    const isVideo = (mode === 'video');
+    const preferLightning = (isIOS || isSafari || isVideo);
+
+    const modelType = preferLightning
+      ? poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
+      : poseDetection.movenet.modelType.SINGLEPOSE_THUNDER;
+
+    // recreating detector helps switch between camera/video without carrying heavier settings
+    if (detector) {
+      try { detector.dispose?.(); } catch (_) {}
+      detector = null;
+    }
+    detector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      {
+        modelType,
+        enableTracking: true,
+        trackerType: poseDetection.TrackerType.BoundingBox
+      }
+    );
+  }
+
   async function initModel() {
     setStatus('loading', '<span class="loading-spinner"></span> Loading TensorFlow backend…');
     const backend = await initTFBackend();
 
     setStatus('loading', `<span class="loading-spinner"></span> Loading MoveNet (backend: ${backend})…`);
-    detector = await poseDetection.createDetector(
-      poseDetection.SupportedModels.MoveNet,
-      {
-        modelType: (isIOS || isSafari)
-          ? poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
-          : poseDetection.movenet.modelType.SINGLEPOSE_THUNDER,
-        enableTracking: true,
-        trackerType: poseDetection.TrackerType.BoundingBox
-      }
-    );
+    await createDetectorForSource('camera'); // default
 
     initCharts();
     syncModeUI();
@@ -928,18 +877,20 @@
     setStatus('ready', `✓ Model Ready (backend: ${backend}) — Choose Camera or Upload Video`);
     startCamBtn.disabled = false;
     loadVideoBtn.disabled = false;
-
-    renderIssuesForCurrentView();
   }
 
   // ============================================================
-  // Media cleanup
+  // Cleanup
   // ============================================================
   function stopLoops() {
     isRunning = false;
     if (animId) cancelAnimationFrame(animId);
     animId = null;
     vfcActive = false;
+
+    // stop pending inference queue
+    pendingTMs = null;
+    pendingFromSource = null;
   }
 
   function stopStream() {
@@ -980,7 +931,6 @@
 
   function stopAll() {
     stopRecordingIfNeeded();
-
     stopLoops();
     stopStream();
     revokeVideoUrl();
@@ -1015,6 +965,8 @@
 
       setStatus('loading', '<span class="loading-spinner"></span> Starting camera…');
       setSourceUI('camera');
+
+      await createDetectorForSource('camera');
 
       webcam.muted = true;
       webcam.playsInline = true;
@@ -1060,7 +1012,9 @@
       isRunning = true;
       loopFrames = 0;
       loopFpsT0 = performance.now();
-      loopPose(performance.now());
+
+      // camera loop uses RAF; inference is queued (anti-lag)
+      startRealtimeLoop('camera');
     } catch (e) {
       setSourceUI('none');
       setStatus('error', '✗ Camera Error: ' + (e?.message || e));
@@ -1078,6 +1032,8 @@
 
       setSourceUI('video');
       setStatus('loading', '<span class="loading-spinner"></span> Loading video…');
+
+      await createDetectorForSource('video');
 
       revokeVideoUrl();
       videoObjectUrl = URL.createObjectURL(file);
@@ -1133,7 +1089,7 @@
       await webcam.play();
       resizeCanvasToVideo();
       playPauseBtn.textContent = 'Pause';
-      startVideoAnalysisLoop();
+      startRealtimeLoop('video');
     } else {
       webcam.pause();
       playPauseBtn.textContent = 'Play';
@@ -1141,13 +1097,21 @@
     }
   }
 
-  function startVideoAnalysisLoop() {
+  // ============================================================
+  // REAL-TIME loop (anti-lag)
+  // - Never allow inference backlog: keep only the latest frame timestamp.
+  // - Auto-throttle based on measured inference time so it "feels real-time".
+  // ============================================================
+  function startRealtimeLoop(mode) {
     stopLoops();
     isRunning = true;
     loopFrames = 0;
     loopFpsT0 = performance.now();
+    inferenceBusy = false;
+    pendingTMs = null;
+    pendingFromSource = null;
 
-    if (useVFC) {
+    if (mode === 'video' && useVFC) {
       vfcActive = true;
       const cb = (now, metadata) => {
         if (!vfcActive || !isRunning || webcam.paused || webcam.ended) return;
@@ -1155,51 +1119,95 @@
         const tMs = (metadata && typeof metadata.mediaTime === 'number')
           ? metadata.mediaTime * 1000
           : (webcam.currentTime * 1000);
-        loopPose(tMs);
+        queueInference(tMs, 'video');
         webcam.requestVideoFrameCallback(cb);
       };
       webcam.requestVideoFrameCallback(cb);
     } else {
       const raf = () => {
-        if (!isRunning || webcam.paused || webcam.ended) return;
+        if (!isRunning) return;
         resizeCanvasToVideo();
-        loopPose(webcam.currentTime * 1000);
+        const tMs = (sourceMode === 'video') ? (webcam.currentTime * 1000) : performance.now();
+        queueInference(tMs, sourceMode);
         animId = requestAnimationFrame(raf);
       };
       animId = requestAnimationFrame(raf);
     }
   }
 
-  // ============================================================
-  // Loop + pose
-  // ============================================================
-  async function loopPose(tNowMs) {
-    if (!isRunning) return;
-
+  function queueInference(tNowMs, src) {
+    // FPS display based on loop calls (not inference)
     loopFrames++;
     const nowPerf = performance.now();
     if ((nowPerf - loopFpsT0) >= 1000) {
       const loopFps = Math.round(loopFrames * 1000 / (nowPerf - loopFpsT0));
-      fpsDisplay.textContent = `FPS: ${loopFps}` + (sourceMode === 'video' ? ' (analysis)' : '');
+      const inferHint = `infer~${Math.max(1, Math.round(1000 / Math.max(1, minInferIntervalMs || 1)))}Hz`;
+      fpsDisplay.textContent = `FPS: ${loopFps}` + (sourceMode === 'video' ? ` (analysis, ${inferHint})` : ` (${inferHint})`);
       loopFrames = 0;
       loopFpsT0 = nowPerf;
     }
 
+    // if we’re currently busy, keep ONLY latest timestamp (drop intermediate frames)
+    pendingTMs = tNowMs;
+    pendingFromSource = src;
+
+    // throttle: if inference just ran, wait a little (dynamic)
+    const sinceLast = nowPerf - lastInferPerfMs;
+    if (sinceLast < minInferIntervalMs) return;
+
+    if (!inferenceBusy) runInferenceLatest();
+  }
+
+  async function runInferenceLatest() {
+    if (!isRunning) return;
+    if (inferenceBusy) return;
+    if (pendingTMs == null) return;
+
+    inferenceBusy = true;
+    const tNowMs = pendingTMs;
+    pendingTMs = null;
+
+    const t0 = performance.now();
     try {
       const poses = await detector.estimatePoses(webcam);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const t1 = performance.now();
+      const inferMs = t1 - t0;
 
+      // update EMA and dynamic throttling
+      inferEMAms = 0.85 * inferEMAms + 0.15 * inferMs;
+
+      // Auto adjust: keep it smooth for treadmill running
+      // - If inference is slow, increase skip (larger interval)
+      // - If inference is fast, reduce skip (smaller interval)
+      // targetInferMs loosely aims at responsive experience
+      targetInferMs = (sourceMode === 'video') ? 40 : 45;
+      const loadRatio = inferEMAms / Math.max(1, targetInferMs);
+
+      // min interval between inferences
+      // clamp to reasonable bounds so we still catch steps at 7–12 km/h
+      // running step frequency usually ~2.5–3.5 Hz per foot; we want inference comfortably above ~15–20 Hz
+      const desiredHz = Math.max(18, Math.min(30, Math.round(24 / Math.max(0.7, loadRatio))));
+      minInferIntervalMs = Math.round(1000 / desiredHz);
+
+      lastInferPerfMs = t1;
+
+      // render + analyze
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (poses && poses.length > 0 && poses[0]?.keypoints?.length) {
         const kps = poses[0].keypoints;
         drawSkeleton(kps);
+        drawJointNames(kps); // NEW: show joint names in video
         analyzePerFrame(kps, tNowMs);
       }
     } catch (e) {
       console.error('Pose error:', e);
-    }
-
-    if (sourceMode === 'camera') {
-      animId = requestAnimationFrame(() => loopPose(performance.now()));
+    } finally {
+      inferenceBusy = false;
+      // If new frame arrived while busy, immediately process latest
+      if (pendingTMs != null && isRunning) {
+        // small yield helps UI
+        Promise.resolve().then(runInferenceLatest);
+      }
     }
   }
 
@@ -1241,6 +1249,31 @@
         ctx.stroke();
       }
     }
+  }
+
+  // NEW: joint names overlay
+  function drawJointNames(kps) {
+    const names = {
+      0:'Nose', 5:'L Shoulder', 6:'R Shoulder', 7:'L Elbow', 8:'R Elbow', 9:'L Wrist', 10:'R Wrist',
+      11:'L Hip', 12:'R Hip', 13:'L Knee', 14:'R Knee', 15:'L Ankle', 16:'R Ankle'
+    };
+    ctx.save();
+    ctx.font = '12px ui-monospace, Menlo, Consolas, monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.lineWidth = 3;
+
+    for (const idxStr of Object.keys(names)) {
+      const i = Number(idxStr);
+      const kp = kps[i];
+      if (!kp || kp.score <= 0.35) continue;
+      const text = names[i];
+      const x = kp.x + 10;
+      const y = kp.y - 10;
+      ctx.strokeText(text, x, y);
+      ctx.fillText(text, x, y);
+    }
+    ctx.restore();
   }
 
   // ============================================================
@@ -1294,33 +1327,23 @@
 
     const pxToCm = estimatePxToCm(nose, ankleL, ankleR, subject.height);
 
-    // Pelvic drop proxy (best in FRONTAL)
+    // Pelvic drop proxy (FRONTAL)
     const pelvicTiltDeg = computePelvicTiltDeg(hipL, hipR);
     document.getElementById('pelvicTilt').innerHTML = `${pelvicTiltDeg.toFixed(1)}<span class="metric-unit">°</span>`;
 
-    // VO (height-calibrated) -- live display always, BUT bouncer tagging only in SAGITTAL
+    // VO (Sagittal only for Bouncer; but VO live metric still shown for both)
     const hipMidY = midY(hipL, hipR);
     let voCmLive = gait.vo.lastVOcm;
     if (hipMidY != null && pxToCm) {
       voCmLive = updateVerticalOscillation(hipMidY, pxToCm);
       document.getElementById('vertOsc').innerHTML = `${voCmLive.toFixed(1)}<span class="metric-unit">cm</span>`;
-
-      if (m === 'sagittal') {
-        const h = Math.max(1, subject.height || 1);
-        const voRatio = voCmLive / h;
-        const b = thresholds().bouncer;
-        if ((voCmLive > b.voCm || voRatio > b.voRatio) &&
-            shouldPersist(s => (s.viewModeAtCapture === 'sagittal') && ((s.voCmAtIC ?? 0) > b.voCm || (s.voRatioAtIC ?? 0) > b.voRatio))) {
-          addIssue('warning', 'Bouncer: excessive vertical oscillation (VO)', 'Bouncer', 'sagittal');
-        }
-      }
     }
 
     // knee angles
     const kneeDegL = (hipL && kneeL && ankleL) ? calculateAngle(hipL, kneeL, ankleL) : null;
     const kneeDegR = (hipR && kneeR && ankleR) ? calculateAngle(hipR, kneeR, ankleR) : null;
 
-    // Frontal knee drift proxy
+    // Frontal knee drift proxy (general)
     if (m === 'frontal') {
       const drift = computeKneeMedialDriftProxyDeg(hipL, kneeL, ankleL, hipR, kneeR, ankleR);
       modeMetricValue.textContent = `${drift.toFixed(1)}°`;
@@ -1331,7 +1354,7 @@
     handleFoot('R', tNowMs, ankleR, hipL, hipR, kneeDegR, pelvicTiltDeg, pxToCm, m, voCmLive, subject.height);
 
     updatePhaseUI(gait.feet.L.contact, gait.feet.R.contact);
-    updateCadenceUI(); // general warnings should appear in BOTH views
+    updateCadenceUI();
     updateRollingUI();
 
     exportBtn.disabled = gait.steps.length === 0;
@@ -1367,8 +1390,10 @@
     if (f.active && f.active.inStance) {
       if (typeof kneeDeg === 'number') f.active.samples.push({ t: tNow, kneeDeg });
 
-      // Collapser uses max pelvic drop during stance (FRONTAL only; but max tracking ok)
-      f.active.pelvicTiltMaxDeg = Math.max(f.active.pelvicTiltMaxDeg, pelvicTiltDeg);
+      // Collapser uses max pelvic drop during stance (FRONTAL only)
+      if (mode === 'frontal') {
+        f.active.pelvicTiltMaxDeg = Math.max(f.active.pelvicTiltMaxDeg, pelvicTiltDeg);
+      }
 
       // GRF curve: store throughout stance (downsample)
       const decel = Math.max(0, -aY);
@@ -1399,8 +1424,9 @@
 
     const f = gait.feet[side];
 
-    // debounce
-    const minICGapMs = 220;
+    // AUTO treadmill-adjusted debounce:
+    // - based on recent cadence, keep in range that works for 7–12 km/h
+    const minICGapMs = gait.dynamic.minICGapMs || 220;
     if (f.lastIC && (tIC - f.lastIC) < minICGapMs) return;
 
     const hipMidX = midX(hipL, hipR);
@@ -1423,7 +1449,6 @@
     // start active
     f.active = {
       side,
-      viewModeAtCapture: mode,      // IMPORTANT: store view mode
       tIC_ms: tIC,
       tTO_ms: null,
       inStance: true,
@@ -1431,24 +1456,32 @@
       swingTimeS: null,
       strideCm: null,
       kneeMidStanceDeg: null,
+
+      // Only used in FRONTAL
       pelvicTiltMaxDeg: 0,
+
       samples: [],
       grfProxy: { peak: 0, tPeak: null },
       grfCurve: [],
+
+      // Only used in SAGITTAL
       overstrideLevel: null,
+      overstrideFSR: null,
+      voCmAtIC: (typeof voCmLive === 'number') ? voCmLive : null,
+      voRatioAtIC: (typeof voCmLive === 'number' && typeof heightCm === 'number' && heightCm > 0) ? (voCmLive / heightCm) : null,
+
+      // Only used in FRONTAL
+      crossover: null,
+      stepWidthCmAtIC: null,
+
       landingQuality: null,
       grfPeakBW: null,
       grfTimeToPeakMs: null,
       notes: '',
-      overstrideFSR: null,
-      crossover: null,
-      stepWidthCmAtIC: null,
-      voCmAtIC: (typeof voCmLive === 'number') ? voCmLive : null,
-      voRatioAtIC: (typeof voCmLive === 'number' && typeof heightCm === 'number' && heightCm > 0) ? (voCmLive / heightCm) : null,
       tags: []
     };
 
-    // ====== Overstride logic (SAGITTAL only) ======
+    // ====== SAGITTAL: Overstrider + Bouncer only ======
     if (mode === 'sagittal') {
       const legLenPx = (hipLegX != null && hipLegY != null)
         ? Math.hypot(ankle.x - hipLegX, ankle.y - hipLegY)
@@ -1468,16 +1501,19 @@
       const highNow = (typeof fsr === 'number') && fsr >= th.high;
       const modNow  = (typeof fsr === 'number') && fsr >= th.moderate;
 
-      if (highNow && shouldPersist(s => (s.viewModeAtCapture === 'sagittal') && ((s.overstrideFSR ?? 0) >= th.high))) {
-        addIssue('critical', `${side}: Overstrider (FSR ${fsr.toFixed(2)})`, 'Overstrider', 'sagittal');
+      if (highNow && shouldPersist(s => (s.overstrideFSR ?? 0) >= th.high)) {
+        addIssue('critical', `${side}: Overstrider (FSR ${fsr.toFixed(2)})`, 'Overstrider');
         f.active.tags.push('Overstrider');
-      } else if (modNow && shouldPersist(s => (s.viewModeAtCapture === 'sagittal') && ((s.overstrideFSR ?? 0) >= th.moderate))) {
-        addIssue('warning', `${side}: Overstrider tendency (FSR ${fsr.toFixed(2)})`, 'Overstrider', 'sagittal');
+      } else if (modNow && shouldPersist(s => (s.overstrideFSR ?? 0) >= th.moderate)) {
+        addIssue('warning', `${side}: Overstrider tendency (FSR ${fsr.toFixed(2)})`, 'Overstrider');
         f.active.tags.push('Overstrider');
       }
+
+      // Bouncer persistence check uses per-step VO stored at IC, evaluated at TO for stance completeness
+      // (still record VO here)
     }
 
-    // ====== Crossover logic (FRONTAL only) ======
+    // ====== FRONTAL: Collapser + Crossover only ======
     if (mode === 'frontal') {
       const midlineX = midX(hipL, hipR);
       if (midlineX != null) {
@@ -1494,21 +1530,19 @@
         const cTh = thresholds().crossover;
         const narrow = (typeof f.active.stepWidthCmAtIC === 'number') ? (f.active.stepWidthCmAtIC < cTh.narrowStepWidthCm) : false;
 
-        if ((crossed || narrow) &&
-            shouldPersist(s => (s.viewModeAtCapture === 'frontal') && (s.crossover === true || ((s.stepWidthCmAtIC ?? 999) < cTh.narrowStepWidthCm)))) {
-          addIssue('warning', `${side}: Crossover gait (midline/narrow)`, 'Crossover', 'frontal');
+        if ((crossed || narrow) && shouldPersist(s => s.crossover === true || ((s.stepWidthCmAtIC ?? 999) < cTh.narrowStepWidthCm))) {
+          addIssue('warning', `${side}: Crossover gait (midline/narrow)`, 'Crossover');
           f.active.tags.push('Crossover');
         }
       }
     }
 
-    // store cadence IC times
+    // cadence timestamps
     gait.icTimes.push(tIC);
     if (gait.icTimes.length > 12) gait.icTimes.shift();
 
     f.lastIC = tIC;
     f.lastIC_hipX = (hipMidX != null) ? hipMidX : null;
-
     setPhaseIndicator(1);
   }
 
@@ -1532,46 +1566,48 @@
     f.active.grfPeakBW = grfBW;
     f.active.landingQuality = classifyLanding(grfBW, ttpMs);
 
-    // ====== Collapser logic (FRONTAL only) ======
-    if (f.active.viewModeAtCapture === 'frontal') {
+    // ====== FRONTAL only: Collapser ======
+    if (viewMode() === 'frontal') {
       const c = thresholds().collapser;
       const drop = f.active.pelvicTiltMaxDeg || 0;
       const highNow = drop >= c.high;
       const modNow  = drop >= c.moderate;
 
-      if (highNow && shouldPersist(s => (s.viewModeAtCapture === 'frontal') && ((s.pelvicTiltMaxDeg ?? 0) >= c.high))) {
-        addIssue('critical', `${side}: Collapser (pelvic drop ${drop.toFixed(1)}°)`, 'Collapser', 'frontal');
+      if (highNow && shouldPersist(s => (s.pelvicTiltMaxDeg ?? 0) >= c.high)) {
+        addIssue('critical', `${side}: Collapser (pelvic drop ${drop.toFixed(1)}°)`, 'Collapser');
         f.active.tags.push('Collapser');
         f.active.notes += 'Collapser pattern; ';
-      } else if (modNow && shouldPersist(s => (s.viewModeAtCapture === 'frontal') && ((s.pelvicTiltMaxDeg ?? 0) >= c.moderate))) {
-        addIssue('warning', `${side}: Collapser tendency (pelvic drop ${drop.toFixed(1)}°)`, 'Collapser', 'frontal');
+      } else if (modNow && shouldPersist(s => (s.pelvicTiltMaxDeg ?? 0) >= c.moderate)) {
+        addIssue('warning', `${side}: Collapser tendency (pelvic drop ${drop.toFixed(1)}°)`, 'Collapser');
         f.active.tags.push('Collapser');
         f.active.notes += 'Collapser tendency; ';
       }
     }
 
-    // ====== Bouncer logic (SAGITTAL only) ======
-    if (f.active.viewModeAtCapture === 'sagittal') {
+    // ====== SAGITTAL only: Bouncer ======
+    if (viewMode() === 'sagittal') {
       const b = thresholds().bouncer;
       const voCm = (typeof f.active.voCmAtIC === 'number') ? f.active.voCmAtIC : 0;
       const voRatio = (typeof f.active.voRatioAtIC === 'number') ? f.active.voRatioAtIC : 0;
 
-      if ((voCm > b.voCm || voRatio > b.voRatio) &&
-          shouldPersist(s => (s.viewModeAtCapture === 'sagittal') && ((s.voCmAtIC ?? 0) > b.voCm || (s.voRatioAtIC ?? 0) > b.voRatio))) {
-        addIssue('warning', `${side}: Bouncer (VO ${voCm.toFixed(1)}cm)`, 'Bouncer', 'sagittal');
+      if ((voCm > b.voCm || voRatio > b.voRatio) && shouldPersist(s => (s.voCmAtIC ?? 0) > b.voCm || (s.voRatioAtIC ?? 0) > b.voRatio)) {
+        addIssue('warning', `${side}: Bouncer (VO ${voCm.toFixed(1)}cm)`, 'Bouncer');
         f.active.tags.push('Bouncer');
         f.active.notes += 'High VO; ';
       }
     }
 
-    // general issues (both views) — viewMode stored as null so it shows in BOTH
+    // ====== General warnings (both views) ======
     if (typeof f.active.kneeMidStanceDeg === 'number' && f.active.kneeMidStanceDeg > 165) {
-      addIssue('warning', `${side}: Low mid-stance knee flexion`, null, null);
+      addIssue('warning', `${side}: Low mid-stance knee flexion`);
       f.active.notes += 'Low mid-stance knee flexion; ';
     }
     if (f.active.landingQuality === 'Hard') {
-      addIssue('warning', `${side}: Hard landing tendency (GRF proxy)`, null, null);
+      addIssue('warning', `${side}: Hard landing tendency (GRF proxy)`);
       f.active.notes += 'Hard landing tendency; ';
+    }
+    if (typeof f.active.stanceTimeS === 'number' && f.active.stanceTimeS > 0.45) {
+      addIssue('warning', `${side}: Long stance time (possible braking/low cadence)`);
     }
 
     updateLastStepCards(f.active);
@@ -1605,74 +1641,68 @@
   }
 
   // ============================================================
-  // Deficiency sub-scores (0–100 each) + gated by view
+  // Deficiency subscores (0–100 each) + total (0–100)
+  // - Sagittal: Overstrider + Bouncer only
+  // - Frontal: Collapser + Crossover only
   // ============================================================
   function clamp01(x) { return Math.max(0, Math.min(1, x)); }
   function clamp100(x) { return Math.max(0, Math.min(100, x)); }
 
-  function computeDeficiencySubScores(step) {
+  function computeDeficiencySubscores(step) {
     const th = thresholds();
-    const vm = step.viewModeAtCapture;
-
+    const m = step.viewMode || viewMode(); // step stores its viewMode at finalize
     let coll = 0, over = 0, bou = 0, cro = 0;
 
-    if (vm === 'sagittal') {
-      // Overstrider (FSR)
+    if (m === 'sagittal') {
+      // Overstrider
       if (typeof step.overstrideFSR === 'number') {
         const fsr = step.overstrideFSR;
         const s = (fsr - th.overstride.moderate) / (th.overstride.high - th.overstride.moderate);
         over = clamp100(100 * clamp01(s));
       }
-
-      // Bouncer (VO)
-      const voCm = step.voCmAtIC ?? null;
-      const voRatio = step.voRatioAtIC ?? null;
-      if (typeof voCm === 'number' || typeof voRatio === 'number') {
-        const s1 = ( (voCm ?? 0) - th.bouncer.voCm ) / (th.bouncer.voCm * 0.5 || 1);
-        const s2 = ( (voRatio ?? 0) - th.bouncer.voRatio ) / (th.bouncer.voRatio * 0.5 || 1);
-        bou = clamp100(100 * clamp01(Math.max(s1, s2)));
-      }
-
-      // frontal-only scores forced to 0
-      coll = 0;
-      cro = 0;
-    }
-
-    if (vm === 'frontal') {
-      // Collapser (pelvic drop max)
+      // Bouncer
+      const voCm = step.voCmAtIC ?? 0;
+      const voRatio = step.voRatioAtIC ?? 0;
+      const s1 = (voCm - th.bouncer.voCm) / (th.bouncer.voCm * 0.5 || 1);
+      const s2 = (voRatio - th.bouncer.voRatio) / (th.bouncer.voRatio * 0.5 || 1);
+      bou = clamp100(100 * clamp01(Math.max(s1, s2)));
+    } else if (m === 'frontal') {
+      // Collapser
       if (typeof step.pelvicTiltMaxDeg === 'number') {
         const d = step.pelvicTiltMaxDeg;
         const s = (d - th.collapser.moderate) / (th.collapser.high - th.collapser.moderate);
         coll = clamp100(100 * clamp01(s));
       }
-
-      // Crossover: binary + narrow step bonus
-      const crossed = (step.crossover === true);
-      const narrow = (typeof step.stepWidthCmAtIC === 'number')
-        ? (step.stepWidthCmAtIC < th.crossover.narrowStepWidthCm)
-        : false;
-
-      if (crossed) cro = 100;
-      else if (narrow) cro = 60;
-      else cro = 0;
-
-      // sagittal-only scores forced to 0
-      over = 0;
-      bou = 0;
+      // Crossover
+      if (step.crossover === true) cro = 75;
+      const cTh = th.crossover;
+      if (typeof step.stepWidthCmAtIC === 'number' && step.stepWidthCmAtIC < cTh.narrowStepWidthCm) {
+        const s = (cTh.narrowStepWidthCm - step.stepWidthCmAtIC) / cTh.narrowStepWidthCm; // 0..1
+        cro = Math.max(cro, clamp100(60 + 40 * clamp01(s)));
+      }
     }
 
     return { collapser: coll, overstrider: over, bouncer: bou, crossover: cro };
   }
 
-  // ============================================================
-  // Finalize step
-  // ============================================================
+  function computeDeficiencyTotal(sub) {
+    // Total = capped weighted sum (simple and interpretable)
+    // Since only 2 are active per view, weights are balanced.
+    const coll = sub.collapser || 0;
+    const over = sub.overstrider || 0;
+    const bou  = sub.bouncer || 0;
+    const cro  = sub.crossover || 0;
+
+    // Keep total 0-100
+    const total = 0.30*coll + 0.35*over + 0.20*bou + 0.15*cro;
+    return clamp100(total);
+  }
+
   function finalizeStep(step) {
     const row = {
       idx: gait.steps.length + 1,
       side: step.side,
-      viewModeAtCapture: step.viewModeAtCapture,
-
+      viewMode: viewMode(),             // store view at capture
       tIC_ms: step.tIC_ms,
       tTO_ms: step.tTO_ms,
       stanceTimeS: step.stanceTimeS,
@@ -1680,14 +1710,12 @@
       strideCm: step.strideCm,
       kneeMidStanceDeg: step.kneeMidStanceDeg,
       pelvicTiltMaxDeg: step.pelvicTiltMaxDeg,
-
       grfPeakBW: step.grfPeakBW,
       grfTimeToPeakMs: step.grfTimeToPeakMs,
       landingQuality: step.landingQuality,
       overstrideLevel: step.overstrideLevel,
       grfCurve: step.grfCurve || [],
       notes: (step.notes || '').trim(),
-
       overstrideFSR: step.overstrideFSR,
       crossover: step.crossover,
       stepWidthCmAtIC: step.stepWidthCmAtIC,
@@ -1696,7 +1724,8 @@
       tags: Array.isArray(step.tags) ? step.tags.slice() : []
     };
 
-    row.deficiencySubScores = computeDeficiencySubScores(row);
+    row.deficiencySub = computeDeficiencySubscores(row);
+    row.deficiencyTotal = computeDeficiencyTotal(row.deficiencySub);
 
     gait.steps.push(row);
 
@@ -1716,7 +1745,7 @@
   }
 
   // ============================================================
-  // Phase + cadence + rolling stats
+  // Phase + cadence + rolling stats + treadmill auto-adjust
   // ============================================================
   function updatePhaseUI(L_contact, R_contact) {
     let label = 'Standing', dot = 1;
@@ -1731,6 +1760,7 @@
   function updateCadenceUI() {
     const t = gait.icTimes;
     if (t.length < 4) return;
+
     const lastN = 8;
     const slice = t.slice(-lastN);
 
@@ -1739,10 +1769,18 @@
     const avg = deltas.reduce((a,b)=>a+b,0) / deltas.length;
     const cadence = avg > 0 ? Math.round(60 / avg) : 0;
 
+    // auto-adjust for treadmill running:
+    // update avg step period and IC debounce range
+    const avgStepMs = Math.max(260, Math.min(520, avg * 1000)); // typical treadmill run range
+    gait.dynamic.avgStepPeriodMs = 0.8 * gait.dynamic.avgStepPeriodMs + 0.2 * avgStepMs;
+    // min gap = ~45% of step period (clamped), good for 7–12 km/h
+    gait.dynamic.minICGapMs = Math.round(Math.max(140, Math.min(260, 0.45 * gait.dynamic.avgStepPeriodMs)));
+
     document.getElementById('cadence').innerHTML = `${cadence}<span class="metric-unit">steps/min</span>`;
 
-    // GENERAL warning: appears in BOTH views
-    if (cadence > 0 && cadence < 160) addIssue('warning', 'Low cadence - consider increasing step rate', null, null);
+    // General warning (both views)
+    if (cadence > 0 && cadence < 160) addIssue('warning', 'Low cadence - consider increasing step rate');
+    if (cadence > 0 && cadence > 210) addIssue('warning', 'Very high cadence - ensure form stays stable');
   }
 
   function updateRollingUI() {
@@ -1812,11 +1850,9 @@
     const vals = [driftL, driftR].filter(v => typeof v === 'number');
     const max = vals.length ? Math.max(...vals) : 0;
 
-    // These are general frontal warnings (no tags) — show in BOTH views? You asked general warnings in both views,
-    // but these are inherently frontal. We'll tag them as GENERAL (null) so they show in both,
-    // while the numeric value is still only computed/updated in frontal mode.
-    if (max > 18) addIssue('critical', 'Frontal: High knee medial drift (valgus proxy)', null, null);
-    else if (max > 12) addIssue('warning', 'Frontal: Moderate knee medial drift (valgus proxy)', null, null);
+    // general warnings for frontal
+    if (max > 18) addIssue('critical', 'Frontal: High knee medial drift (valgus proxy)');
+    else if (max > 12) addIssue('warning', 'Frontal: Moderate knee medial drift (valgus proxy)');
 
     return max;
   }
@@ -1826,7 +1862,7 @@
   // ============================================================
   function mapDecelProxyToBW(p) {
     const x = Math.max(0, Math.min(p, 20000));
-    return 1.2 + 1.8 * (1 - Math.exp(-x / 6000));
+    return 1.2 + 1.8 * (1 - Math.exp(-x / 6000)); // asymptote ~3.0
   }
 
   function classifyLanding(grfBW, ttpMs) {
@@ -1879,40 +1915,39 @@
   }
 
   // ============================================================
-  // Issues list (tagged issues are view-gated; general warnings show both)
+  // Issues list
   // ============================================================
-  function addIssue(severity, message, tagLabel, issueViewMode = null) {
-    // issueViewMode: 'sagittal' | 'frontal' | null (null = general => show both)
-    const vm = issueViewMode; // keep exact intent
-
-    // Gate only tagged deficiencies by the rule requested
-    if (tagLabel === 'Bouncer' || tagLabel === 'Overstrider') {
-      if (vm !== 'sagittal') return;
-    }
-    if (tagLabel === 'Collapser' || tagLabel === 'Crossover') {
-      if (vm !== 'frontal') return;
-    }
-
-    const key = `${severity}:${message}:${tagLabel || ''}:${vm === null ? 'ALL' : vm}`;
+  function addIssue(severity, message, tagLabel) {
+    const key = `${severity}:${message}`;
     if (detectedIssues.has(key)) return;
+
     detectedIssues.add(key);
+    const issuesList = document.getElementById('issuesList');
 
-    issuesLog.unshift({
-      t: performance.now(),
-      severity,
-      message,
-      tagLabel: tagLabel || null,
-      viewMode: vm // null => show both
-    });
-    if (issuesLog.length > 200) issuesLog.length = 200;
+    if (detectedIssues.size === 1) issuesList.innerHTML = '';
 
-    renderIssuesForCurrentView();
+    const div = document.createElement('div');
+    div.className = 'issue-item ' + severity;
+
+    if (tagLabel) {
+      div.textContent = message;
+      const tag = document.createElement('span');
+      tag.className = 'issue-tag';
+      tag.textContent = tagLabel;
+      div.appendChild(tag);
+    } else {
+      div.textContent = message;
+    }
+
+    issuesList.insertBefore(div, issuesList.firstChild);
+
+    while (issuesList.children.length > 6) issuesList.removeChild(issuesList.lastChild);
 
     setTimeout(() => detectedIssues.delete(key), 6500);
   }
 
   // ============================================================
-  // Recording (fixed: button always reflects state, stop is stable)
+  // Recording
   // ============================================================
   function toggleRecording() {
     isRecording = !isRecording;
@@ -1959,7 +1994,7 @@
   }
 
   // ============================================================
-  // XLSX export
+  // XLSX export (includes subscores)
   // ============================================================
   async function exportToXLSX() {
     if (!gait.steps.length) return alert('No steps to export. Record first.');
@@ -1978,43 +2013,47 @@
       ['Gait Biodynamics Lab - Per-Step Report'],
       ['Date', new Date().toLocaleString()],
       ['Source', sourceMode],
-      ['Current View Mode', viewMode()],
+      ['View Mode', viewMode()],
       ['Sex', subject.sex],
       ['Age (years)', subject.age],
       ['Mass (kg)', subject.mass],
       ['Height (cm)', subject.height],
       ['Copyright', '© 2025 Ng Jun Wei. All rights reserved.'],
-      ['Notes', 'Knee mid-stance = knee angle near 50% stance. GRF proxy curve = BW proxy over stance from ankle vertical decel. VO from hip-mid baseline filtered. Overstride uses FSR normalized by leg length px at IC. Collapser uses peak pelvic drop proxy during stance (frontal). Crossover uses midline crossing (frontal). Deficiency sub-scores are view-gated.']
+      ['Notes', 'Knee mid-stance = knee angle near 50% stance. GRF proxy curve = BW proxy over stance from ankle vertical decel. VO from hip-mid baseline filtered. Overstride uses FSR normalized by leg length px at IC. Collapser uses peak pelvic drop proxy during stance (frontal). Crossover uses midline crossing/narrow step width (frontal). Subscores are view-specific.']
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(subjectSheetData), 'Subject');
 
-    const rows = gait.steps.map(s => ({
-      'Step #': s.idx,
-      'Side': s.side,
-      'View Mode (captured)': s.viewModeAtCapture || '',
-      'IC Time (ms)': Math.round(s.tIC_ms),
-      'TO Time (ms)': (typeof s.tTO_ms === 'number') ? Math.round(s.tTO_ms) : '',
-      'Stance Time (s)': (typeof s.stanceTimeS === 'number') ? Number(s.stanceTimeS.toFixed(3)) : '',
-      'Swing Time (s)': (typeof s.swingTimeS === 'number') ? Number(s.swingTimeS.toFixed(3)) : '',
-      'Stride Length (cm)': (typeof s.strideCm === 'number') ? Number(s.strideCm.toFixed(1)) : '',
-      'Knee Flexion Mid-Stance (°)': (typeof s.kneeMidStanceDeg === 'number') ? Number(s.kneeMidStanceDeg.toFixed(1)) : '',
-      'Pelvic Drop Max (° proxy)': (typeof s.pelvicTiltMaxDeg === 'number') ? Number(s.pelvicTiltMaxDeg.toFixed(2)) : '',
-      'GRF Peak (BW, proxy)': (typeof s.grfPeakBW === 'number') ? Number(s.grfPeakBW.toFixed(2)) : '',
-      'GRF Time-to-Peak (ms, proxy)': (typeof s.grfTimeToPeakMs === 'number') ? Number(s.grfTimeToPeakMs.toFixed(0)) : '',
-      'Landing Quality': s.landingQuality || '',
-      'Overstride Level (sagittal)': s.overstrideLevel || '',
-      'Overstride FSR (leg-normalized)': (typeof s.overstrideFSR === 'number') ? Number(s.overstrideFSR.toFixed(3)) : '',
-      'Crossover (midline)': (s.crossover === true) ? 'Yes' : (s.crossover === false ? 'No' : ''),
-      'Step width at IC (cm)': (typeof s.stepWidthCmAtIC === 'number') ? Number(s.stepWidthCmAtIC.toFixed(1)) : '',
-      'VO at IC (cm)': (typeof s.voCmAtIC === 'number') ? Number(s.voCmAtIC.toFixed(1)) : '',
-      'VO ratio at IC': (typeof s.voRatioAtIC === 'number') ? Number(s.voRatioAtIC.toFixed(4)) : '',
-      'Def SubScore - Collapser (0-100)': Number((s.deficiencySubScores?.collapser ?? 0).toFixed(1)),
-      'Def SubScore - Overstrider (0-100)': Number((s.deficiencySubScores?.overstrider ?? 0).toFixed(1)),
-      'Def SubScore - Bouncer (0-100)': Number((s.deficiencySubScores?.bouncer ?? 0).toFixed(1)),
-      'Def SubScore - Crossover (0-100)': Number((s.deficiencySubScores?.crossover ?? 0).toFixed(1)),
-      'Tags': Array.isArray(s.tags) ? s.tags.join(', ') : '',
-      'Notes': s.notes || ''
-    }));
+    const rows = gait.steps.map(s => {
+      const sub = s.deficiencySub || {};
+      return ({
+        'Step #': s.idx,
+        'Side': s.side,
+        'View': s.viewMode,
+        'IC Time (ms)': Math.round(s.tIC_ms),
+        'TO Time (ms)': (typeof s.tTO_ms === 'number') ? Math.round(s.tTO_ms) : '',
+        'Stance Time (s)': (typeof s.stanceTimeS === 'number') ? Number(s.stanceTimeS.toFixed(3)) : '',
+        'Swing Time (s)': (typeof s.swingTimeS === 'number') ? Number(s.swingTimeS.toFixed(3)) : '',
+        'Stride Length (cm)': (typeof s.strideCm === 'number') ? Number(s.strideCm.toFixed(1)) : '',
+        'Knee Flexion Mid-Stance (°)': (typeof s.kneeMidStanceDeg === 'number') ? Number(s.kneeMidStanceDeg.toFixed(1)) : '',
+        'Pelvic Drop Max (° proxy)': (typeof s.pelvicTiltMaxDeg === 'number') ? Number(s.pelvicTiltMaxDeg.toFixed(2)) : '',
+        'GRF Peak (BW, proxy)': (typeof s.grfPeakBW === 'number') ? Number(s.grfPeakBW.toFixed(2)) : '',
+        'GRF Time-to-Peak (ms, proxy)': (typeof s.grfTimeToPeakMs === 'number') ? Number(s.grfTimeToPeakMs.toFixed(0)) : '',
+        'Landing Quality': s.landingQuality || '',
+        'Overstride Level (sagittal)': s.overstrideLevel || '',
+        'Overstride FSR (leg-normalized)': (typeof s.overstrideFSR === 'number') ? Number(s.overstrideFSR.toFixed(3)) : '',
+        'Crossover (midline)': (s.crossover === true) ? 'Yes' : (s.crossover === false ? 'No' : ''),
+        'Step width at IC (cm)': (typeof s.stepWidthCmAtIC === 'number') ? Number(s.stepWidthCmAtIC.toFixed(1)) : '',
+        'VO at IC (cm)': (typeof s.voCmAtIC === 'number') ? Number(s.voCmAtIC.toFixed(1)) : '',
+        'VO ratio at IC': (typeof s.voRatioAtIC === 'number') ? Number(s.voRatioAtIC.toFixed(4)) : '',
+        'Subscore Collapser (0-100)': Number((sub.collapser ?? 0).toFixed(1)),
+        'Subscore Overstrider (0-100)': Number((sub.overstrider ?? 0).toFixed(1)),
+        'Subscore Bouncer (0-100)': Number((sub.bouncer ?? 0).toFixed(1)),
+        'Subscore Crossover (0-100)': Number((sub.crossover ?? 0).toFixed(1)),
+        'Deficiency Total (0-100)': (typeof s.deficiencyTotal === 'number') ? Number(s.deficiencyTotal.toFixed(1)) : '',
+        'Tags': Array.isArray(s.tags) ? s.tags.join(', ') : '',
+        'Notes': s.notes || ''
+      });
+    });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Steps');
 
     const curveRows = [];
@@ -2024,7 +2063,7 @@
         curveRows.push({
           'Step #': s.idx,
           'Side': s.side,
-          'View Mode': s.viewModeAtCapture || '',
+          'View': s.viewMode,
           't_from_IC_ms': Math.round(p.tRelMs),
           'GRF_proxy_BW': Number(p.bw.toFixed(3))
         });
@@ -2098,7 +2137,7 @@
       playPauseBtn.textContent = 'Play';
       stopLoops();
     }
-    const assumedFps = Math.max(10, Math.min(1000, Number(assumedFpsEl.value || 240)));
+    const assumedFps = Math.max(10, Math.min(1000, Number(assumedFpsEl.value || 60)));
     const stepFrames = Math.max(1, Number(frameStepModeEl.value || 1));
     const dt = (deltaFrames * stepFrames) / assumedFps;
     const dur = webcam.duration || 0;
@@ -2106,7 +2145,9 @@
     webcam.currentTime = next;
     updateSeekUI();
     resizeCanvasToVideo();
-    loopPose(webcam.currentTime * 1000);
+    // run a single inference on this exact frame
+    queueInference(webcam.currentTime * 1000, 'video');
+    runInferenceLatest();
   }
 
   function skipSeconds(ds) {
@@ -2121,7 +2162,8 @@
     webcam.currentTime = next;
     updateSeekUI();
     resizeCanvasToVideo();
-    loopPose(webcam.currentTime * 1000);
+    queueInference(webcam.currentTime * 1000, 'video');
+    runInferenceLatest();
   }
 
   // ============================================================
@@ -2144,11 +2186,7 @@
   exportBtn.addEventListener('click', exportToXLSX);
   snapshotBtn.addEventListener('click', exportSnapshotPNG);
 
-  viewModeEl.addEventListener('change', () => {
-    syncModeUI();
-    renderIssuesForCurrentView();  // instantly hide wrong-view tagged issues
-    renderSelectedGRFCurve();      // chart is per-step anyway; keep fresh
-  });
+  viewModeEl.addEventListener('change', syncModeUI);
 
   seekBar.addEventListener('input', () => { if (sourceMode === 'video') seekToBarValue(); });
   webcam.addEventListener('timeupdate', () => updateSeekUI());
@@ -2178,8 +2216,6 @@
 
       isRecording = false;
       setRecordingUI();
-
-      renderIssuesForCurrentView();
     } catch (e) {
       setStatus('error', '✗ Init Error: ' + (e?.message || e));
       console.error(e);
